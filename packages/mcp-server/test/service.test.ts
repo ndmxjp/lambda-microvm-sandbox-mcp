@@ -332,6 +332,7 @@ describe("SandboxService end to end against an in-process agent", () => {
       accountId,
       registry: new Registry(null),
       logs: {
+        findStream: async (_group, microvmId) => `2026/09/26[5.0]${microvmId}`,
         tail: async (group, stream, limit) => {
           tailed.push([group, stream, limit]);
           return [{ timestamp: 1_700_000_000_000, message: "[sandbox-agent] hook: run" }];
@@ -341,12 +342,10 @@ describe("SandboxService end to end against an in-process agent", () => {
     });
     const b = await withRole.create();
     expect(api.runCalls.at(-1)?.executionRoleArn).toBe(roleArn);
-    expect((await withRole.status(b.sandbox_id)).cloudwatch_logs).toEqual({
-      log_group: "/aws/lambda-microvms/sandbox-agent",
-      log_stream: b.sandbox_id,
-    });
+    expect((await withRole.status(b.sandbox_id)).cloudwatch_logs?.log_group).toBe("/aws/lambda-microvms/sandbox-agent");
     const logs = await withRole.vmLogs(b.sandbox_id, 50);
-    expect(tailed).toEqual([["/aws/lambda-microvms/sandbox-agent", b.sandbox_id, 50]]);
+    expect(tailed).toEqual([["/aws/lambda-microvms/sandbox-agent", `2026/09/26[5.0]${b.sandbox_id}`, 50]]);
+    expect(logs.log_stream).toBe(`2026/09/26[5.0]${b.sandbox_id}`);
     expect(logs.events[0]?.message).toContain("hook: run");
     await withRole.destroy(b.sandbox_id);
   });

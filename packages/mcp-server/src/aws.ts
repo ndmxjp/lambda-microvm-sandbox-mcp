@@ -11,7 +11,7 @@ import {
   type RunMicrovmCommandInput,
 } from "@aws-sdk/client-lambda-microvms";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { CloudWatchLogsClient, GetLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
+import { CloudWatchLogsClient, DescribeLogStreamsCommand, GetLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type MicrovmState = "PENDING" | "RUNNING" | "SUSPENDING" | "SUSPENDED" | "TERMINATING" | "TERMINATED" | string;

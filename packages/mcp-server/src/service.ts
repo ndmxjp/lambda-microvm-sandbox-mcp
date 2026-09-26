@@ -117,7 +117,7 @@ export class SandboxService {
     if (info?.stateReason) s.state_reason = info.stateReason;
     const fw = this.forwards.get(record.sandbox_id);
     if (fw && fw.size > 0) s.port_forwards = [...fw.values()].map((f) => ({ url: f.url, remote_port: f.remote_port }));
-    if (record.execution_role_arn) s.cloudwatch_logs = { log_group: logGroupFor(this.config.imageName), log_stream: record.microvm_id };
+    if (record.execution_role_arn) s.cloudwatch_logs = { log_group: logGroupFor(this.config.imageName), log_stream: `<date>[<image version>]${record.microvm_id}` };
     return s;
   }
 
