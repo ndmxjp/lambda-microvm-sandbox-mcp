@@ -35,17 +35,24 @@ export async function runDoctor(config: Config, log: (msg: string) => void): Pro
       checks.push({
         name: "image",
         ok: Boolean(active),
-        detail: active ? `${arn} latest ACTIVE version ${active}` : `${arn} exists but has no ACTIVE version (${img.state}); ${setupHint(config)}`,
+        detail: active
+          ? `${arn} latest ACTIVE version ${active}`
+          : `${arn} exists but has no ACTIVE version (${img.state}); ${setupHint(config)}`,
       });
     } catch (err) {
       const notFound = /NotFound/i.test(String((err as { name?: string }).name ?? err));
-      checks.push({ name: "image", ok: false, detail: notFound ? `${arn} not found; ${setupHint(config)}` : `${arn}: ${String(err).split("\n")[0]}` });
+      checks.push({
+        name: "image",
+        ok: false,
+        detail: notFound ? `${arn} not found; ${setupHint(config)}` : `${arn}: ${String(err).split("\n")[0]}`,
+      });
     }
   }
   checks.push({
     name: "config",
     ok: true,
-    detail: `max duration ${config.maxDurationS}s, idle ${config.idleS}s, suspended ${config.suspendedS}s, internet egress ${config.internetEgress}, state file ${config.stateFile}` +
+    detail:
+      `max duration ${config.maxDurationS}s, idle ${config.idleS}s, suspended ${config.suspendedS}s, internet egress ${config.internetEgress}, state file ${config.stateFile}` +
       (config.transferBucket ? `, transfer bucket ${config.transferBucket}` : ", direct chunked transfers"),
   });
   for (const c of checks) log(`${c.ok ? "ok  " : "FAIL"} ${c.name.padEnd(12)} ${c.detail}`);

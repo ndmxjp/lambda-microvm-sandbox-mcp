@@ -13,7 +13,12 @@ export interface TestAgent {
   hooks: string;
   rootSocket: string;
   /** Call an API route with the secret header. */
-  call<T = unknown>(method: string, route: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<{ status: number; json: T }>;
+  call<T = unknown>(
+    method: string,
+    route: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<{ status: number; json: T }>;
   /** POST a lifecycle hook. */
   hook(name: string, body?: unknown): Promise<{ status: number; json: unknown }>;
   /** Deliver the secret through the /run hook (what Lambda does after RunMicrovm). */

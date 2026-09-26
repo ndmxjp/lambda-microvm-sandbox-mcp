@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DEFAULTS, imageArnFor, loadConfig, parseArgs, type Config } from "../src/config.js";
 import { Registry } from "../src/registry.js";
 import { SandboxService } from "../src/service.js";
-import { SandboxClient, SandboxError, TokenManager } from "../src/client.js";
+import { SandboxClient, TokenManager } from "../src/client.js";
 import { createMcpServer } from "../src/server.js";
 import { FakeMicrovmApi, FakeTransferStore } from "./fake-aws.js";
 
@@ -312,7 +312,9 @@ describe("SandboxService end to end against an in-process agent", () => {
     const cfg = loadConfig(["--region", "us-east-1", "--image-name", "custom"], {});
     const svc = new SandboxService({ config: cfg, api: missing, accountId, registry: new Registry(null), log: () => undefined });
     expect(await svc.resolveImageArn()).toBe("arn:aws:lambda:us-east-1:123456789012:microvm-image:custom");
-    await expect(svc.create()).rejects.toThrow(/does not exist; run `npx lambda-microvm-sandbox-mcp setup --region us-east-1 --image-name custom`/);
+    await expect(svc.create()).rejects.toThrow(
+      /does not exist; run `npx lambda-microvm-sandbox-mcp setup --region us-east-1 --image-name custom`/,
+    );
   });
 });
 

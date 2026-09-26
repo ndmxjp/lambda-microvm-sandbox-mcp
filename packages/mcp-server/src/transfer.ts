@@ -22,7 +22,10 @@ function runLocal(argv: string[], cwd: string): Promise<void> {
   });
 }
 
-export async function createLocalArchive(localPath: string, excludes: string[]): Promise<{ file: string; size: number; sha256: string; cleanup(): Promise<void> }> {
+export async function createLocalArchive(
+  localPath: string,
+  excludes: string[],
+): Promise<{ file: string; size: number; sha256: string; cleanup(): Promise<void> }> {
   const resolved = path.resolve(localPath);
   let st;
   try {
@@ -86,7 +89,10 @@ export async function uploadDirectory(
     let chunks = 0;
     for (let off = 0; off < data.length; off += CHUNK_BYTES) {
       const piece = data.subarray(off, Math.min(off + CHUNK_BYTES, data.length));
-      await client.request("PUT", "/archive/upload/chunk", { query: { transfer_id: start.transfer_id, offset: off }, body: new Uint8Array(piece) });
+      await client.request("PUT", "/archive/upload/chunk", {
+        query: { transfer_id: start.transfer_id, offset: off },
+        body: new Uint8Array(piece),
+      });
       chunks++;
     }
     if (data.length === 0) chunks = 0;
@@ -120,7 +126,9 @@ export async function downloadPath(
       const key = `${store.prefix}${client.record.sandbox_id}/${Date.now()}-download.tar.gz`;
       const putUrl = await store.s3.presignPut(key, 900);
       try {
-        const pushed = await client.request<{ bytes: number }>("POST", "/files/push", { json: { src: remotePath, url: putUrl, exclude: excludes } });
+        const pushed = await client.request<{ bytes: number }>("POST", "/files/push", {
+          json: { src: remotePath, url: putUrl, exclude: excludes },
+        });
         const getUrl = await store.s3.presignGet(key, 900);
         const res = await fetch(getUrl);
         if (!res.ok) throw new SandboxError(`S3 download failed: ${res.status}`);

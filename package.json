@@ -15,15 +15,22 @@
     "test:watch": "vitest",
     "build-image": "node packages/mcp-server/dist/index.js setup",
     "smoke-test": "tsx scripts/smoke-test.ts",
-    "doctor": "node packages/mcp-server/dist/index.js doctor"
+    "doctor": "node packages/mcp-server/dist/index.js doctor",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
     "@aws-sdk/client-sts": "^3.1141.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.15.0",
     "esbuild": "^0.25.0",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^3.2.0"
   }
 }

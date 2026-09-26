@@ -44,16 +44,25 @@ try {
   id = created.sandbox_id;
   console.log(`sandbox ${id} at ${created.endpoint}`);
 
-  const who = await t("exec whoami", () => service.exec(id as string, { command: "whoami; id; pwd; node --version; python3 --version; git --version" }));
+  const who = await t("exec whoami", () =>
+    service.exec(id as string, { command: "whoami; id; pwd; node --version; python3 --version; git --version" }),
+  );
   console.log(who.stdout.trim());
   if (who.exit_code !== 0) throw new Error(`toolchain check failed: ${who.stderr}`);
 
-  const root = await t("exec sudo (shim over root relay)", () => service.exec(id as string, { command: "sudo -n whoami && echo hi | sudo tee /root/from-sudo >/dev/null && sudo cat /root/from-sudo" }));
+  const root = await t("exec sudo (shim over root relay)", () =>
+    service.exec(id as string, { command: "sudo -n whoami && echo hi | sudo tee /root/from-sudo >/dev/null && sudo cat /root/from-sudo" }),
+  );
   if (root.stdout.trim() !== "root\nhi") throw new Error(`sudo failed (${root.exit_code}): ${root.stdout} ${root.stderr}`);
   const asRoot = await t("exec as_root", () => service.exec(id as string, { command: "whoami", as_root: true }));
   if (asRoot.stdout.trim() !== "root") throw new Error(`as_root failed: ${asRoot.stderr}`);
-  const pkg = await t("exec sudo dnf install (bc)", () => service.exec(id as string, { // dnf in the al2023-minimal image is microdnf: no -q flag.
-    command: "sudo dnf install -y bc >/dev/null && echo '2+3' | bc", timeout_s: 300 }));
+  const pkg = await t("exec sudo dnf install (bc)", () =>
+    service.exec(id as string, {
+      // dnf in the al2023-minimal image is microdnf: no -q flag.
+      command: "sudo dnf install -y bc >/dev/null && echo '2+3' | bc",
+      timeout_s: 300,
+    }),
+  );
   console.log(`  dnf result: ${pkg.stdout.trim()} (exit ${pkg.exit_code}) ${pkg.stderr.trim().slice(0, 200)}`);
 
   await t("write file", () => service.writeFile(id as string, { path: "hello.txt", content: "hello from smoke test\n" }));

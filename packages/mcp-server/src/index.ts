@@ -35,7 +35,12 @@ function fail(msg: string, code = 2): never {
 function confirm(question: string): Promise<boolean> {
   if (!process.stdin.isTTY) return Promise.resolve(false);
   const rl = createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((resolve) => rl.question(`${question} [y/N] `, (a) => { rl.close(); resolve(/^y(es)?$/i.test(a.trim())); }));
+  return new Promise((resolve) =>
+    rl.question(`${question} [y/N] `, (a) => {
+      rl.close();
+      resolve(/^y(es)?$/i.test(a.trim()));
+    }),
+  );
 }
 
 async function serve(argv: string[]): Promise<void> {
@@ -59,7 +64,9 @@ async function serve(argv: string[]): Promise<void> {
   });
   const server = createMcpServer(service);
   await server.connect(new StdioServerTransport());
-  console.error(`[lambda-sandbox] ready (region=${config.region}, image=${config.imageArn ?? config.imageName}, state=${config.stateFile})`);
+  console.error(
+    `[lambda-sandbox] ready (region=${config.region}, image=${config.imageArn ?? config.imageName}, state=${config.stateFile})`,
+  );
 }
 
 async function setup(argv: string[]): Promise<void> {
@@ -124,10 +131,14 @@ async function main(): Promise<void> {
       return;
     }
     switch (command) {
-      case "serve": return await serve(rest);
-      case "setup": return await setup(rest);
-      case "doctor": return await doctor(rest);
-      default: fail(`unknown command "${command}"`);
+      case "serve":
+        return await serve(rest);
+      case "setup":
+        return await setup(rest);
+      case "doctor":
+        return await doctor(rest);
+      default:
+        fail(`unknown command "${command}"`);
     }
   } catch (err) {
     if (command === "serve" && /region|required|must be/i.test(String(err))) fail(err instanceof Error ? err.message : String(err));

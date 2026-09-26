@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 20
+          - os: ubuntu-latest
+            node: 22
+          - os: macos-latest
+            node: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      # `npm test` builds both packages first, then runs vitest against the
+      # real agent in-process with a fake Lambda control plane. No AWS needed.
+      - run: npm test
+      - name: Package contents
+        run: |
+          cd packages/mcp-server
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e '
+            const files = require("/tmp/pack.json")[0].files.map(f => f.path);
+            for (const f of ["dist/index.js", "image/Dockerfile", "image/agent.mjs", "image/sudo.mjs", "cloudformation/prerequisites.yaml"]) {
+              if (!files.includes(f)) { console.error("missing from package:", f); process.exit(1); }
+            }
+            console.log(files.length, "files ok");'
+      - name: npx smoke (help, print-config, tools/list over stdio)
+        run: |
+          cd packages/mcp-server
+          npm pack --silent
+          cd "$(mktemp -d)"
+          npm init -y >/dev/null
+          npm i --silent "$GITHUB_WORKSPACE"/packages/mcp-server/lambda-microvm-sandbox-mcp-*.tgz
+          npx lambda-microvm-sandbox-mcp --help | head -3
+          npx lambda-microvm-sandbox-mcp --region us-east-1 --print-config | grep '"imageName": "sandbox-agent"'
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | npx lambda-microvm-sandbox-mcp --region us-east-1 2>/dev/null \
+            | node -e 'let n=0; require("readline").createInterface({input:process.stdin}).on("line", l => { const m = JSON.parse(l); if (m.id === 2) n = m.result.tools.length; }).on("close", () => { if (n !== 13) { console.error("expected 13 tools, got", n); process.exit(1); } console.log("tools/list ok:", n); });'
+
+  dockerfile:
+    name: Dockerfile lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: packages/sandbox-agent/image/Dockerfile
+          # DL3041: pinning dnf package versions is impractical for a rolling AL2023 base.
+          ignore: DL3041
+
+  image:
+    # Builds the real image for linux/arm64 (the MicroVM architecture) and boots
+    # the agent inside it: validates the dnf package list, the sudo shim and
+    # the lifecycle hooks without touching AWS. Slow under QEMU, so it only runs
+    # when the image inputs change.
+    name: Build and boot image (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'push' || contains(join(github.event.pull_request.labels.*.name, ','), 'image')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/sandbox-agent
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/sandbox-agent/dist/image
+          platforms: linux/arm64
+          load: true
+          tags: sandbox-agent:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Boot the agent and drive the hooks and API
+        run: bash packages/sandbox-agent/image/ci-boot-test.sh sandbox-agent:ci

@@ -23,7 +23,10 @@ import { HOOKS, type ImageBuildInput, type SetupClients } from "./setup.js";
 
 function isNotFound(err: unknown): boolean {
   const name = (err as { name?: string }).name ?? "";
-  return /NotFound|NoSuchEntity|ResourceNotFound|NoSuchBucket/.test(name) || (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404;
+  return (
+    /NotFound|NoSuchEntity|ResourceNotFound|NoSuchBucket/.test(name) ||
+    (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404
+  );
 }
 
 export class RealSetupClients implements SetupClients {
@@ -80,13 +83,20 @@ export class RealSetupClients implements SetupClients {
     await this.s3.send(
       new PutPublicAccessBlockCommand({
         Bucket: name,
-        PublicAccessBlockConfiguration: { BlockPublicAcls: true, IgnorePublicAcls: true, BlockPublicPolicy: true, RestrictPublicBuckets: true },
+        PublicAccessBlockConfiguration: {
+          BlockPublicAcls: true,
+          IgnorePublicAcls: true,
+          BlockPublicPolicy: true,
+          RestrictPublicBuckets: true,
+        },
       }),
     );
     await this.s3.send(
       new PutBucketEncryptionCommand({
         Bucket: name,
-        ServerSideEncryptionConfiguration: { Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" }, BucketKeyEnabled: true }] },
+        ServerSideEncryptionConfiguration: {
+          Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" }, BucketKeyEnabled: true }],
+        },
       }),
     );
     await this.s3.send(
@@ -96,7 +106,12 @@ export class RealSetupClients implements SetupClients {
           Rules: [
             { ID: "expire-image-artifacts", Status: "Enabled", Filter: { Prefix: "microvm-images/" }, Expiration: { Days: 30 } },
             { ID: "expire-transfers", Status: "Enabled", Filter: { Prefix: "lambda-sandbox-transfers/" }, Expiration: { Days: 1 } },
-            { ID: "abort-multipart", Status: "Enabled", Filter: { Prefix: "" }, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } },
+            {
+              ID: "abort-multipart",
+              Status: "Enabled",
+              Filter: { Prefix: "" },
+              AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
+            },
           ],
         },
       }),

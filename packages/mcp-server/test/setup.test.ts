@@ -4,7 +4,15 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { crc32, createZip } from "../src/zip.js";
-import { buildRolePolicy, defaultBucketName, runSetup, trustPolicy, type ImageBuildInput, type SetupClients, type SetupOptions } from "../src/setup.js";
+import {
+  buildRolePolicy,
+  defaultBucketName,
+  runSetup,
+  trustPolicy,
+  type ImageBuildInput,
+  type SetupClients,
+  type SetupOptions,
+} from "../src/setup.js";
 
 describe("zip writer", () => {
   it("computes crc32 like everyone else", () => {
@@ -47,23 +55,45 @@ class FakeSetupClients implements SetupClients {
   supported = true;
   calls: string[] = [];
 
-  async accountId() { return "111122223333"; }
-  async regionSupported() { return this.supported; }
-  async bucketExists(name: string) { return this.buckets.has(name); }
-  async createBucket(name: string) { this.calls.push(`createBucket ${name}`); this.buckets.add(name); }
-  async hardenBucket(name: string) { this.hardened.push(name); }
-  async putObject(bucket: string, key: string, body: Uint8Array) { this.calls.push(`put ${bucket}/${key}`); this.objects.set(`${bucket}/${key}`, body); }
-  async getRoleArn(name: string) { return this.roles.get(name); }
+  async accountId() {
+    return "111122223333";
+  }
+  async regionSupported() {
+    return this.supported;
+  }
+  async bucketExists(name: string) {
+    return this.buckets.has(name);
+  }
+  async createBucket(name: string) {
+    this.calls.push(`createBucket ${name}`);
+    this.buckets.add(name);
+  }
+  async hardenBucket(name: string) {
+    this.hardened.push(name);
+  }
+  async putObject(bucket: string, key: string, body: Uint8Array) {
+    this.calls.push(`put ${bucket}/${key}`);
+    this.objects.set(`${bucket}/${key}`, body);
+  }
+  async getRoleArn(name: string) {
+    return this.roles.get(name);
+  }
   async createRole(name: string, trust: string, policy: string) {
     this.calls.push(`createRole ${name}`);
-    JSON.parse(trust); JSON.parse(policy);
+    JSON.parse(trust);
+    JSON.parse(policy);
     const arn = `arn:aws:iam::111122223333:role/${name}`;
     this.roles.set(name, arn);
     return arn;
   }
-  async imageExists(arn: string) { return this.images.has(arn); }
+  async imageExists(arn: string) {
+    return this.images.has(arn);
+  }
   async createImage(input: ImageBuildInput) {
-    if (this.createImageFailures > 0) { this.createImageFailures--; throw new Error("InvalidParameterValueException: The role defined for the image cannot be assumed by Lambda."); }
+    if (this.createImageFailures > 0) {
+      this.createImageFailures--;
+      throw new Error("InvalidParameterValueException: The role defined for the image cannot be assumed by Lambda.");
+    }
     this.calls.push(`createImage ${input.name} ${input.codeArtifactUri}`);
     this.images.set(input.imageArn, ["1.0"]);
   }
@@ -79,7 +109,9 @@ class FakeSetupClients implements SetupClients {
     const state = seq.length > 1 ? (seq.shift() as string) : (seq[0] as string);
     return { state };
   }
-  async buildLogTail() { return ["build log line 1", "build log line 2"]; }
+  async buildLogTail() {
+    return ["build log line 1", "build log line 2"];
+  }
 }
 
 const io = (confirmAnswer = true) => {
@@ -127,7 +159,9 @@ describe("setup", () => {
     expect(r.imageVersion).toBe("1.0");
     expect(c.calls[0]).toMatch(/^createBucket lambda-microvm-sandbox-111122223333-ap-northeast-1$/);
     expect(c.calls[1]).toMatch(/^createRole/);
-    expect(c.calls[2]).toMatch(/^put lambda-microvm-sandbox-111122223333-ap-northeast-1\/microvm-images\/sandbox-agent\/[0-9a-f]{16}\.zip$/);
+    expect(c.calls[2]).toMatch(
+      /^put lambda-microvm-sandbox-111122223333-ap-northeast-1\/microvm-images\/sandbox-agent\/[0-9a-f]{16}\.zip$/,
+    );
     expect(c.calls[3]).toMatch(/^createImage sandbox-agent s3:\/\//);
     expect(c.hardened).toEqual([r.bucket]);
     expect(lines.filter((l) => l.includes("waiting for IAM")).length).toBe(2);
@@ -158,7 +192,11 @@ describe("setup", () => {
     await expect(runSetup(opts(), unsupported, io().io)).rejects.toThrow(/not available in ap-northeast-1/);
 
     const failing = new FakeSetupClients();
-    failing.versionStates.set("arn:aws:lambda:ap-northeast-1:111122223333:microvm-image:sandbox-agent@1.0", ["PENDING", "IN_PROGRESS", "FAILED"]);
+    failing.versionStates.set("arn:aws:lambda:ap-northeast-1:111122223333:microvm-image:sandbox-agent@1.0", [
+      "PENDING",
+      "IN_PROGRESS",
+      "FAILED",
+    ]);
     const { io: i, lines } = io();
     await expect(runSetup(opts(), failing, i)).rejects.toThrow(/ended in FAILED/);
     expect(lines.join("\n")).toMatch(/build log line 2/);

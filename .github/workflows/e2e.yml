@@ -1,0 +1,38 @@
+name: E2E (AWS, billable)
+
+# Manual only: builds the image in the target account with `setup` and runs
+# the smoke test against a real MicroVM (a few cents). Needs an IAM role that
+# trusts this repository's GitHub OIDC provider, stored as the AWS_ROLE_ARN
+# repository variable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: AWS region with Lambda MicroVMs
+        default: ap-northeast-1
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.region }}
+      - run: npm ci
+      - run: npm run build
+      - run: node packages/mcp-server/dist/index.js setup --region "${{ inputs.region }}" --yes
+      - run: node packages/mcp-server/dist/index.js doctor --region "${{ inputs.region }}"
+      - run: npx tsx scripts/smoke-test.ts --yes --region "${{ inputs.region }}"

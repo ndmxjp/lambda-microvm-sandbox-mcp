@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { MicrovmApi, MicrovmInfo, TransferStore } from "./aws.js";
 import { SandboxClient, SandboxError, TokenManager, defaultDeps, type ClientDeps } from "./client.js";
 import { connectorArn, imageArnFor, setupHint, type Config } from "./config.js";
-import { Registry, type SandboxRecord } from "./registry.js";
+import type { Registry, SandboxRecord } from "./registry.js";
 import { DEFAULT_EXCLUDES, downloadPath, uploadDirectory, type DownloadResult, type UploadResult } from "./transfer.js";
 import type * as P from "@lambda-microvm-sandbox/agent/protocol";
 
@@ -76,7 +76,13 @@ export class SandboxService {
     const existing = this.clients.get(id);
     if (existing) return existing;
     const record = this.deps.registry.require(id);
-    const tokens = new TokenManager(this.deps.api, record.microvm_id, this.config.tokenTtlMin, this.config.tokenRefreshMarginS, this.clientDeps.now);
+    const tokens = new TokenManager(
+      this.deps.api,
+      record.microvm_id,
+      this.config.tokenTtlMin,
+      this.config.tokenRefreshMarginS,
+      this.clientDeps.now,
+    );
     const client = new SandboxClient(record, tokens, this.clientDeps, this.config.resumeWaitS * 1000);
     this.clients.set(id, client);
     return client;
@@ -267,7 +273,12 @@ export class SandboxService {
         }
         this.deps.registry.remove(record.sandbox_id);
         this.clients.delete(record.sandbox_id);
-        sandboxes.push(this.summary(record, { state: "TERMINATED", stateReason: reason ?? "no longer listed by Lambda (max duration, idle policy or external terminate)" }));
+        sandboxes.push(
+          this.summary(record, {
+            state: "TERMINATED",
+            stateReason: reason ?? "no longer listed by Lambda (max duration, idle policy or external terminate)",
+          }),
+        );
         continue;
       }
       sandboxes.push(this.summary(record, { state: m.state }));

@@ -384,7 +384,11 @@ describe("root relay and sudo shim", () => {
   }
 
   it("runs argv over the socket with cwd, env and stdin", async () => {
-    const r = await relay({ argv: ["bash", "-c", "cat; echo; pwd; echo $X"], stdin: Buffer.from("in").toString("base64"), env: { X: "y" } });
+    const r = await relay({
+      argv: ["bash", "-c", "cat; echo; pwd; echo $X"],
+      stdin: Buffer.from("in").toString("base64"),
+      env: { X: "y" },
+    });
     expect(r.exit_code).toBe(0);
     expect(r.stdout).toBe(`in\n${t.workspace}\ny\n`);
   });
@@ -396,7 +400,11 @@ describe("root relay and sudo shim", () => {
 
   // The agent runs in this very process, so the shim must be spawned
   // asynchronously: spawnSync would block the event loop the relay needs.
-  function runShim(args: string[], input?: string, socket = t.rootSocket): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  function runShim(
+    args: string[],
+    input?: string,
+    socket = t.rootSocket,
+  ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [shim, ...args], { env: { ...process.env, SANDBOX_ROOT_SOCKET: socket }, cwd: t.workspace });
       let stdout = "";

@@ -15,6 +15,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import {
   LIMITS,
   type DeleteRequest,
@@ -285,9 +286,7 @@ async function createArchive(state: AgentState, src: string, out: string, exclud
 
 async function sha256File(file: string): Promise<string> {
   const h = createHash("sha256");
-  await pipeline(createReadStream(file), async function* (src) {
-    for await (const chunk of src) h.update(chunk as Buffer);
-  });
+  for await (const chunk of createReadStream(file)) h.update(chunk as Buffer);
   return h.digest("hex");
 }
 
@@ -301,11 +300,7 @@ export async function uploadStart(state: AgentState, req: UploadStartRequest): P
   return { transfer_id: id };
 }
 
-export async function uploadChunk(
-  transferId: unknown,
-  offset: unknown,
-  body: Buffer,
-): Promise<{ transfer_id: string; received: number }> {
+export async function uploadChunk(transferId: unknown, offset: unknown, body: Buffer): Promise<{ transfer_id: string; received: number }> {
   const t = getTransfer(transferId, "upload");
   const off = Number(offset);
   if (!Number.isInteger(off) || off !== t.size) {
@@ -383,7 +378,7 @@ export async function pull(state: AgentState, req: PullRequest): Promise<PullRes
   try {
     const res = await fetch(url);
     if (!res.ok || !res.body) throw new HttpError(502, "pull_failed", `GET ${res.status} from presigned url`);
-    await pipeline(Readable.fromWeb(res.body as import("stream/web").ReadableStream), createWriteStream(file));
+    await pipeline(Readable.fromWeb(res.body as WebReadableStream), createWriteStream(file));
     const bytes = statSync(file).size;
     await extractArchive(state, file, dest);
     return { dest, bytes };
