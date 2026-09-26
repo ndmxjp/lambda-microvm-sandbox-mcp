@@ -273,3 +273,11 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - GitHub Actions: `ci.yml`（typecheck / eslint / prettier / vitest を ubuntu Node 20・22 と macOS Node 22 で実行、`npm pack` → `npx` 起動で stdio の `tools/list` を確認、hadolint、linux/arm64 の Docker ビルドと起動テスト）、`release.yml`（`v*` タグで npm publish、`NPM_TOKEN` が必要）、`e2e.yml`（手動のみ、OIDC ロール `AWS_ROLE_ARN` で setup + smoke test）、Dependabot
 - Docker 起動テスト `packages/sandbox-agent/image/ci-boot-test.sh` は Lambda と MCP サーバーの代わりにフックと API を叩く。dnf パッケージ名や sudo シムの回帰を AWS なしで検出できる。QEMU なので遅く、push 時と `image` ラベル付き PR のみ
 - ローカルで actionlint / hadolint / shellcheck / eslint / prettier をすべて通過。GitHub 上での実行はまだ（push が必要）
+
+## 16. 公開（2026-09-26）
+
+- 履歴を `git filter-repo` で書き換え（アカウント ID → `123456789012`、IAM ユーザー名を伏せ、作者メールを統一）、force push 後に gitleaks を含む CI 全ジョブ成功
+- リポジトリを public 化、`lambda-microvm-sandbox-mcp@0.1.0` を npm に公開（2FA のため publish 本体は通常ターミナルから）。公開直前に npm 11 が `"./dist/index.js"` 形式の bin を削除する問題を発見し `"dist/index.js"` に修正
+- 検証: 別ディレクトリで `npx -y lambda-microvm-sandbox-mcp@0.1.0 --help` / `doctor` が動作。Herdr の別ペインで `claude-pub --mcp-config`（npx 起動の設定）から create → exec（sandbox ユーザー、sudo → root）→ write/read → status → destroy → list が全成功、VM は残っていない
+- 気づき: 検証エージェントが `sandbox_delete` を「destroy の別名」と誤解した。次版でツール名を `sandbox_delete_path` などに変えて混同を避ける
+- 未実施: GitHub Release と `v0.1.0` タグ（`release.yml` が publish を再試行して失敗するため、`NPM_TOKEN` か Trusted Publishing を設定してから）
