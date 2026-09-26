@@ -136,7 +136,7 @@ SDK: `@modelcontextprotocol/sdk` 1.30（`McpServer` + `registerTool` + `StdioSer
 |---|---|
 | `sandbox_create(name?, max_duration_s?, internet_egress?)` | シークレット生成 → `RunMicrovm(runHookPayload=...)` → トークン発行（30 分、port 8080 のみ）→ `/health` が 200 になるまでポーリング（state は結果整合なので接続で判定）→ registry に保存。`sandbox_id`（`microvmId`）と endpoint、期限を返す |
 | `sandbox_exec(sandbox_id, command, cwd?, timeout_s?, env?, as_root?)` | `POST /exec`。既定は `sandbox` ユーザー、`as_root` で root |
-| `sandbox_read_file(sandbox_id, path, encoding?)` / `sandbox_write_file(...)` / `sandbox_list_files(...)` / `sandbox_delete(...)` | `/files/*` |
+| `sandbox_read_file(sandbox_id, path, encoding?)` / `sandbox_write_file(...)` / `sandbox_list_files(...)` / `sandbox_delete_path(...)` | `/files/*` |
 | `sandbox_upload_dir(sandbox_id, local_path, remote_path, exclude?)` | ローカルを tar.gz → 既定は `/archive/upload` へ分割直送、バケット設定時は presigned PUT → `POST /files/pull`。`.git` `node_modules` `.venv` `__pycache__` は既定で除外 |
 | `sandbox_download(sandbox_id, remote_path, local_path)` | 既定は `/archive/download` を分割取得、バケット設定時は `POST /files/push` → ローカルで取得・展開 |
 | `sandbox_suspend` / `sandbox_resume` / `sandbox_destroy` | 対応する API。destroy は registry からも削除 |

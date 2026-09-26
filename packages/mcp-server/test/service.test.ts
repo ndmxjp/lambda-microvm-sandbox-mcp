@@ -396,7 +396,7 @@ describe("MCP surface", () => {
     expect(tools.map((t) => t.name).sort()).toEqual(
       [
         "sandbox_create",
-        "sandbox_delete",
+        "sandbox_delete_path",
         "sandbox_destroy",
         "sandbox_download",
         "sandbox_exec",

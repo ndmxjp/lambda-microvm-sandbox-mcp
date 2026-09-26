@@ -5,7 +5,7 @@ import type { SandboxService } from "./service.js";
 import { SandboxError } from "./client.js";
 
 export const SERVER_NAME = "lambda-microvm-sandbox";
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = "0.1.1";
 
 function ok(result: unknown): CallToolResult {
   return {
@@ -147,10 +147,11 @@ export function createMcpServer(service: SandboxService): McpServer {
   );
 
   server.registerTool(
-    "sandbox_delete",
+    "sandbox_delete_path",
     {
-      title: "Delete a path",
-      description: "Delete a file or (with recursive=true) a directory inside the sandbox.",
+      title: "Delete a file or directory",
+      description:
+        "Delete a single file, or a directory with recursive=true, inside the sandbox. This only removes files; use sandbox_destroy to get rid of the sandbox itself.",
       inputSchema: {
         sandbox_id: sandboxId,
         path: z.string().min(1),

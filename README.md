@@ -111,7 +111,7 @@ read what it needs, and finish with `sandbox_destroy`.
 |---|---|
 | `sandbox_create` | Start a VM and wait until it accepts commands. Returns `sandbox_id`. |
 | `sandbox_exec` | Run a bash command with `cwd`, `timeout_s`, `env`, `stdin`, `as_root`. Returns exit code, stdout, stderr. |
-| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete` | File operations, absolute or relative to `/workspace`. |
+| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete_path` | File operations, absolute or relative to `/workspace`. |
 | `sandbox_upload_dir` / `sandbox_download` | Move directories in and out as tar.gz (`.git`, `node_modules`, … excluded by default). |
 | `sandbox_suspend` / `sandbox_resume` | Pause compute billing while keeping state; suspended VMs auto-resume on the next call. |
 | `sandbox_status` / `sandbox_list` | State and reason; VMs that Lambda already terminated are reported once. |

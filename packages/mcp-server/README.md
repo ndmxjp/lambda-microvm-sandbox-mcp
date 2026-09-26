@@ -80,7 +80,7 @@ all have environment-variable twins (`SANDBOX_IMAGE_NAME`, `SANDBOX_IMAGE_ARN`,
 |---|---|
 | `sandbox_create` | Start a VM and wait until it accepts commands. Returns `sandbox_id`. |
 | `sandbox_exec` | Run a bash command (`cwd`, `timeout_s`, `env`, `stdin`, `as_root`). |
-| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete` | File operations. Paths are absolute or relative to `/workspace`. |
+| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete_path` | File operations. Paths are absolute or relative to `/workspace`. |
 | `sandbox_upload_dir` / `sandbox_download` | Move directories in and out as tar.gz, chunked over the VM endpoint (or via S3 when `--transfer-bucket` is set). |
 | `sandbox_suspend` / `sandbox_resume` | Pause compute billing while keeping state. Suspended VMs auto-resume on the next call. |
 | `sandbox_status` / `sandbox_list` | State and `stateReason`; terminated VMs are reported once and forgotten. |

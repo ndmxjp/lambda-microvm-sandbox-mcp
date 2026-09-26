@@ -87,7 +87,7 @@ Kiro（`.kiro/settings/mcp.json`）:
 |---|---|
 | `sandbox_create` | VM を起動し、コマンドを受け付けるまで待つ。`sandbox_id` を返す |
 | `sandbox_exec` | bash コマンドを実行（`cwd`、`timeout_s`、`env`、`stdin`、`as_root`）。exit code、stdout、stderr を返す |
-| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete` | ファイル操作。パスは絶対または `/workspace` 相対 |
+| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete_path` | ファイル操作。パスは絶対または `/workspace` 相対 |
 | `sandbox_upload_dir` / `sandbox_download` | ディレクトリを tar.gz で出し入れ（`.git`、`node_modules` などは既定で除外） |
 | `sandbox_suspend` / `sandbox_resume` | 状態を保ったままコンピュート課金を止める。suspend 中の VM は次の呼び出しで自動復帰 |
 | `sandbox_status` / `sandbox_list` | 状態と理由。Lambda 側で終了済みの VM は一度だけ報告される |
