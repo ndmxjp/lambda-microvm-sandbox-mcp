@@ -1,0 +1,16 @@
+# gitleaks configuration: extend the default rules and allowlist the dummy
+# secrets used by tests and the CI boot script. Real secrets never live in this
+# repository: the per-VM sandbox secret is generated at runtime and delivered
+# through the /run hook.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Dummy secrets in tests and CI scripts"
+regexes = [
+  '''test-secret-0123456789abcdef''',
+  '''ci-secret-0123456789abcdef''',
+]
+paths = [
+  '''package-lock\.json''',
+]

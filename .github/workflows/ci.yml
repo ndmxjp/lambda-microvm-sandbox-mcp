@@ -65,6 +65,18 @@ jobs:
             | npx lambda-microvm-sandbox-mcp --region us-east-1 2>/dev/null \
             | node -e 'let n=0; require("readline").createInterface({input:process.stdin}).on("line", l => { const m = JSON.parse(l); if (m.id === 2) n = m.result.tools.length; }).on("close", () => { if (n !== 13) { console.error("expected 13 tools, got", n); process.exit(1); } console.log("tools/list ok:", n); });'
 
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_SUMMARY: "false"
+
   dockerfile:
     name: Dockerfile lint
     runs-on: ubuntu-latest
