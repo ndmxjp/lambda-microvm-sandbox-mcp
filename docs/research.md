@@ -134,10 +134,7 @@ MicroVM（Firecracker, AL2023 上のコンテナ）
 ## 手元環境で確認済みのこと（2026-09-26）
 
 - 東京リージョン（ap-northeast-1）で利用可。マネージドベースイメージ `arn:aws:lambda:ap-northeast-1:aws:microvm-image:al2023-1`
-- アカウント 123456789012 に getting-started の残りがあり、流用できる
-  - ビルドロール `arn:aws:iam::123456789012:role/MicrovmBuildRole`（信頼ポリシー: lambda.amazonaws.com の AssumeRole/TagSession。権限: `s3:GetObject` on `lambda-microvm-test-123456789012-apne1/*`、CloudWatch Logs 書き込み）
-  - アーティファクト用バケット `lambda-microvm-test-123456789012-apne1`
-  - イメージ `my-first-microvm-image`（`node:24-alpine` で 8080 を listen するだけのサンプル。流用はしない）
+- アカウント 123456789012 に getting-started の残りがあった（`MicrovmBuildRole`、バケット `lambda-microvm-test-123456789012-apne1`、イメージ `my-first-microvm-image`）。ロールとバケットは 2026-09-26 に削除済みで、現在は `npx lambda-microvm-sandbox-mcp setup` が作るバケットとロールを使う。`my-first-microvm-image` は残っている
   - 稼働中の MicroVM はなし
 - ツール: AWS CLI 2.36.20（`aws lambda-microvms` 対応、2.35.10 以上が必要）、boto3 1.43.103（`lambda-microvms` クライアント対応。`create_microvm_shell_auth_token` もあり）、Python 3.14、Node 26、uv 0.12.3。SAM CLI は未インストール
 - MCP Python SDK は 2.x（2.2.0）。`FastMCP` は `MCPServer`（`from mcp.server.mcpserver import MCPServer`）に改名済み。`@server.tool()` と `server.run("stdio")` の形。1.x のサンプルはそのまま動かない

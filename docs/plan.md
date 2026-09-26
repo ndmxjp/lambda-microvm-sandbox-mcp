@@ -266,4 +266,4 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - 作成物の確認（読み取り API）: Public Access Block 4 項目すべて true、SSE-S3 + Bucket Key、ライフサイクル 3 ルール、信頼ポリシーに `aws:SourceAccount`、権限はバケット配下の GetObject と `/aws/lambda/microvms/*` へのログ書き込みのみ
 - 2 回目の `setup --dry-run` は既存バケットとロールを再利用する表示になり、冪等性を確認。`doctor` は 3.0 を latest ACTIVE と表示
 - 3.0 での smoke test: create 2.5 秒、exec 99 ms、sudo シム 429 ms、`sudo dnf install -y bc` 21 秒で `echo 2+3 | bc` → 5、suspend 後の exec 594 ms、destroy 済み
-- 残っている旧リソース: イメージ 2.0（削除候補）、getting-started 由来の `MicrovmBuildRole` と `lambda-microvm-test-123456789012-apne1`（本プロジェクトでは未使用）
+- 旧リソースの削除（2026-09-26）: イメージ 2.0、getting-started 由来の `MicrovmBuildRole`（インラインポリシー含む）と `lambda-microvm-test-123456789012-apne1`（オブジェクト 3 件含む）を削除。残るのは `sandbox-agent` 3.0、新しいバケットとロール、getting-started の `my-first-microvm-image` 1.0（未確認のため残置）
