@@ -117,7 +117,8 @@ export class SandboxService {
     if (info?.stateReason) s.state_reason = info.stateReason;
     const fw = this.forwards.get(record.sandbox_id);
     if (fw && fw.size > 0) s.port_forwards = [...fw.values()].map((f) => ({ url: f.url, remote_port: f.remote_port }));
-    if (record.execution_role_arn) s.cloudwatch_logs = { log_group: logGroupFor(this.config.imageName), log_stream: `<date>[<image version>]${record.microvm_id}` };
+    if (record.execution_role_arn)
+      s.cloudwatch_logs = { log_group: logGroupFor(this.config.imageName), log_stream: `<date>[<image version>]${record.microvm_id}` };
     return s;
   }
 
@@ -135,16 +136,22 @@ export class SandboxService {
     }
     if (!this.deps.logs) throw new SandboxError("CloudWatch Logs client not configured");
     const group = logGroupFor(this.config.imageName);
+    const stream = await this.deps.logs.findStream(group, record.microvm_id);
+    if (!stream) {
+      throw new SandboxError(
+        `no log stream for ${record.microvm_id} in ${group} yet (Lambda creates it on the first log line, usually within a minute of the VM starting)`,
+      );
+    }
     const events = await this.deps.logs.tail(
       group,
-      record.microvm_id,
+      stream,
       Math.min(Math.max(limit, 1), 1000),
       sinceMinutes ? Date.now() - sinceMinutes * 60_000 : undefined,
     );
     return {
       sandbox_id: id,
       log_group: group,
-      log_stream: record.microvm_id,
+      log_stream: stream,
       events: events.map((e) => ({ time: new Date(e.timestamp).toISOString(), message: e.message })),
     };
   }

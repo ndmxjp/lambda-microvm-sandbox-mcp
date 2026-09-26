@@ -62,6 +62,8 @@ export interface MicrovmApi {
 
 /** Read a sandbox's CloudWatch log stream (only available with an execution role). */
 export interface LogsApi {
+  /** Resolve the stream Lambda writes for this VM: named `<date>[<version>]<microvmId>`. */
+  findStream(logGroup: string, microvmId: string): Promise<string | undefined>;
   tail(logGroup: string, logStream: string, limit: number, startTime?: number): Promise<Array<{ timestamp: number; message: string }>>;
 }
 
@@ -69,6 +71,25 @@ export class RealLogsApi implements LogsApi {
   private readonly client: CloudWatchLogsClient;
   constructor(region: string) {
     this.client = new CloudWatchLogsClient({ region });
+  }
+  async findStream(logGroup: string, microvmId: string): Promise<string | undefined> {
+    let nextToken: string | undefined;
+    for (let page = 0; page < 5; page++) {
+      const r = await this.client.send(
+        new DescribeLogStreamsCommand({
+          logGroupName: logGroup,
+          orderBy: "LastEventTime",
+          descending: true,
+          limit: 50,
+          ...(nextToken ? { nextToken } : {}),
+        }),
+      );
+      const hit = (r.logStreams ?? []).find((s) => s.logStreamName?.endsWith(microvmId));
+      if (hit?.logStreamName) return hit.logStreamName;
+      nextToken = r.nextToken;
+      if (!nextToken) break;
+    }
+    return undefined;
   }
   async tail(logGroup: string, logStream: string, limit: number, startTime?: number) {
     const r = await this.client.send(
