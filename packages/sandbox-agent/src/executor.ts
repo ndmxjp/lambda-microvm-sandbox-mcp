@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { statSync } from "node:fs";
+import { chownSync, mkdirSync, openSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { LIMITS, type ExecRequest, type ExecResponse } from "./protocol.js";
+import { LIMITS, type BackgroundExecResponse, type ExecRequest, type ExecResponse } from "./protocol.js";
 import type { AgentState } from "./state.js";
 import { badRequest } from "./errors.js";
 import { isRoot } from "./users.js";
@@ -118,9 +119,44 @@ export function resolveCwd(state: AgentState, cwd: string | undefined): string {
   return resolved;
 }
 
-export async function runCommand(state: AgentState, req: ExecRequest): Promise<ExecResponse> {
+export async function runCommand(state: AgentState, req: ExecRequest): Promise<ExecResponse | BackgroundExecResponse> {
   if (typeof req.command !== "string" || req.command.length === 0) throw badRequest("command is required");
+  if (req.background === true) return startBackground(state, req);
   return runProcess(state, ["bash", "-c", req.command], req);
+}
+
+/**
+ * Start a long-running command (dev server, watcher) in its own session with
+ * stdout/stderr appended to a log file the agent can read later. The process is
+ * not tracked as "running" so suspend does not wait for it; terminate still
+ * signals it.
+ */
+export function startBackground(state: AgentState, req: ExecRequest): BackgroundExecResponse {
+  const cwd = resolveCwd(state, req.cwd);
+  const logDir = path.join(state.options.transferDir, "..", "jobs");
+  mkdirSync(logDir, { recursive: true, mode: 0o755 });
+  const logPath = path.join(logDir, `${randomUUID()}.log`);
+  const fd = openSync(logPath, "a", 0o644);
+  if (isRoot() && state.execUser && !req.as_root) {
+    try {
+      chownSync(logPath, state.execUser.uid, state.execUser.gid);
+    } catch {
+      /* best effort */
+    }
+  }
+  const opts = spawnOptionsFor(state, {
+    cwd,
+    ...(req.env ? { env: req.env } : {}),
+    asRoot: req.as_root === true,
+    stdio: ["ignore", fd, fd],
+  });
+  const child = spawn("bash", ["-c", req.command], opts);
+  if (child.pid === undefined) throw new Error("failed to start background command");
+  state.background.add(child);
+  child.on("exit", () => state.background.delete(child));
+  child.on("error", () => state.background.delete(child));
+  child.unref();
+  return { background: true, pid: child.pid, log_path: logPath, command: req.command };
 }
 
 export interface ProcessRequest {
@@ -211,6 +247,10 @@ export async function drainRunning(state: AgentState, ms: number): Promise<numbe
 export function killRunning(state: AgentState, signal: NodeJS.Signals = "SIGTERM"): number {
   let n = 0;
   for (const child of state.running) {
+    killGroup(child, signal);
+    n++;
+  }
+  for (const child of state.background) {
     killGroup(child, signal);
     n++;
   }

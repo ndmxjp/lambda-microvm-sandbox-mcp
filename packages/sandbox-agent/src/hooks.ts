@@ -30,6 +30,7 @@ export async function runValidation(state: AgentState): Promise<string[]> {
   for (const [name, command] of checks) {
     try {
       const r = await runCommand(state, { command, timeout_s: 30 });
+      if ("background" in r) continue;
       if (r.exit_code !== 0) failures.push(`${name}: exit ${r.exit_code} ${r.stderr.trim()}`);
     } catch (err) {
       failures.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);

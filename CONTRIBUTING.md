@@ -28,7 +28,7 @@ runs locally. `setup` is tested against fake AWS clients as well.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` / test | push to main, pull requests | typecheck, lint, format check, `npm test` on ubuntu (Node 20, 22) and macOS (Node 22); packs the npm tarball and runs it with `npx` over stdio to confirm `tools/list` returns 13 tools |
+| `ci.yml` / test | push to main, pull requests | typecheck, lint, format check, `npm test` on ubuntu (Node 20, 22) and macOS (Node 22); packs the npm tarball and runs it with `npx` over stdio to confirm `tools/list` returns 15 tools |
 | `ci.yml` / secrets | same | gitleaks over the full history (`.gitleaks.toml` allowlists the dummy test secrets) |
 | `ci.yml` / dockerfile | same | hadolint on the image Dockerfile |
 | `ci.yml` / image | push to main, or PRs labelled `image` | builds the Dockerfile for linux/arm64 under QEMU, boots it in Docker and drives `/ready`, `/run`, `/exec`, the sudo shim and `/validate` (`packages/sandbox-agent/image/ci-boot-test.sh`). Verifies the dnf package list without AWS. About six minutes |

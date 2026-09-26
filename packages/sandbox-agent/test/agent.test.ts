@@ -436,3 +436,41 @@ describe("root relay and sudo shim", () => {
     expect(noSocket.stderr).toMatch(/cannot reach/);
   });
 });
+
+describe("background exec", () => {
+  let t: TestAgent;
+  beforeAll(async () => {
+    t = await launchAgent();
+    await t.deliverSecret();
+  });
+  afterAll(() => t.close());
+
+  it("starts a detached server, returns immediately, and keeps it alive across other calls", async () => {
+    const started = Date.now();
+    const r = await t.call<{ background: true; pid: number; log_path: string }>("POST", "/exec", {
+      command:
+        "echo starting; node -e \"require('http').createServer((q,s)=>s.end('served')).listen(process.argv[1],'127.0.0.1',()=>console.log('listening'))\" 0 & wait",
+      background: true,
+      timeout_s: 1,
+    });
+    expect(r.status).toBe(200);
+    expect(r.json.background).toBe(true);
+    expect(r.json.pid).toBeGreaterThan(0);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(t.agent.state.running.size).toBe(0);
+    expect(t.agent.state.background.size).toBe(1);
+
+    // Wait for the log to show it is up; a normal exec with a 1s timeout must not kill it.
+    for (let i = 0; i < 50 && !readFileSync(r.json.log_path, "utf8").includes("listening"); i++)
+      await new Promise((res) => setTimeout(res, 100));
+    expect(readFileSync(r.json.log_path, "utf8")).toContain("starting");
+    await t.call("POST", "/exec", { command: "sleep 2", timeout_s: 1 });
+    const alive = await t.call<ExecResponse>("POST", "/exec", { command: `kill -0 ${r.json.pid} && echo alive` });
+    expect(alive.json.stdout).toBe("alive\n");
+
+    // terminate hook signals background processes
+    await t.hook("terminate");
+    for (let i = 0; i < 50 && t.agent.state.background.size > 0; i++) await new Promise((res) => setTimeout(res, 100));
+    expect(t.agent.state.background.size).toBe(0);
+  });
+});

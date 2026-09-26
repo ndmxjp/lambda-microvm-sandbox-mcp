@@ -54,6 +54,19 @@ export interface ExecRequest {
   env?: Record<string, string>;
   stdin?: string;
   as_root?: boolean;
+  /**
+   * Start the command detached (own session, output to a log file) and return
+   * immediately. For servers and other long-running processes.
+   */
+  background?: boolean;
+}
+
+export interface BackgroundExecResponse {
+  background: true;
+  pid: number;
+  /** Combined stdout+stderr log inside the sandbox. */
+  log_path: string;
+  command: string;
 }
 
 export interface ExecResponse {

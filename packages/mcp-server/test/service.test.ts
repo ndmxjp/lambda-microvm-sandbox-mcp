@@ -251,6 +251,27 @@ describe("SandboxService end to end against an in-process agent", () => {
     expect(readFileSync(path.join(dest, "lib", "index.js"), "utf8")).toBe("module.exports = 1;\n");
   });
 
+  it("forwards a sandbox port to localhost and widens the token to that port", async () => {
+    const before = api.tokenCalls;
+    const fw = await service.portForward(id, 8080);
+    expect(fw.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(api.tokenCalls).toBe(before); // 8080 is already in the token: no new token needed
+    // The fake VM's agent is what listens on "port 8080": its /health answers through the forward.
+    const res = await fetch(`${fw.url}/health`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ready: boolean }).ready).toBe(true);
+    const again = await service.portForward(id, 8080);
+    expect(again.local_port).toBe(fw.local_port);
+    expect(again.note).toBe("already forwarding");
+    expect((await service.status(id)).port_forwards).toEqual([{ url: fw.url, remote_port: 8080 }]);
+
+    const other = await service.portForward(id, 3000);
+    expect(api.tokenCalls).toBe(before + 1); // new port -> token re-minted with [3000, 8080]
+    expect((await service.stopPortForward(id)).stopped.sort()).toEqual([3000, 8080]);
+    expect((await service.status(id)).port_forwards).toBeUndefined();
+    await expect(fetch(`${other.url}/`)).rejects.toThrow();
+  });
+
   it("suspends, resumes, reports status and lists", async () => {
     expect((await service.suspend(id)).state).toBe("SUSPENDING");
     expect((await service.status(id)).state).toBe("SUSPENDED");
@@ -402,6 +423,8 @@ describe("MCP surface", () => {
         "sandbox_exec",
         "sandbox_list",
         "sandbox_list_files",
+        "sandbox_port_forward",
+        "sandbox_port_forward_stop",
         "sandbox_read_file",
         "sandbox_resume",
         "sandbox_status",

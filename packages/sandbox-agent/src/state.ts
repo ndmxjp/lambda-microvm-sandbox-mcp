@@ -33,6 +33,8 @@ export class AgentState {
   private secret: Buffer | null = null;
   apiReady = false;
   readonly running = new Set<ChildProcess>();
+  /** Detached background commands (servers). Signalled on terminate, not waited for on suspend. */
+  readonly background = new Set<ChildProcess>();
   /** Extra env from the run hook payload. */
   runEnv: Record<string, string> = {};
   readonly execUser: ExecUser | null;

@@ -4,6 +4,7 @@ import { SandboxClient, SandboxError, TokenManager, defaultDeps, type ClientDeps
 import { connectorArn, imageArnFor, setupHint, type Config } from "./config.js";
 import type { Registry, SandboxRecord } from "./registry.js";
 import { DEFAULT_EXCLUDES, downloadPath, uploadDirectory, type DownloadResult, type UploadResult } from "./transfer.js";
+import { startPortForward, type PortForward } from "./forward.js";
 import type * as P from "@lambda-microvm-sandbox/agent/protocol";
 
 export interface ServiceDeps {
@@ -32,6 +33,16 @@ export interface SandboxSummary {
   created_at: string;
   expires_at: string;
   image_version: string;
+  /** Active local port forwards (local URL -> VM port). */
+  port_forwards?: Array<{ url: string; remote_port: number }>;
+}
+
+export interface PortForwardResult {
+  sandbox_id: string;
+  remote_port: number;
+  local_port: number;
+  url: string;
+  note: string;
 }
 
 export interface CreateResult extends SandboxSummary {
@@ -61,6 +72,7 @@ export class SandboxService {
   private readonly log: (msg: string) => void;
   private readonly store: { s3: TransferStore; prefix: string } | null;
   private imageArnCache: string | undefined;
+  private readonly forwards = new Map<string, Map<number, PortForward>>();
 
   constructor(private readonly deps: ServiceDeps) {
     this.clientDeps = { ...defaultDeps, ...(deps.client ?? {}) };
@@ -99,7 +111,50 @@ export class SandboxService {
       image_version: record.image_version,
     };
     if (info?.stateReason) s.state_reason = info.stateReason;
+    const fw = this.forwards.get(record.sandbox_id);
+    if (fw && fw.size > 0) s.port_forwards = [...fw.values()].map((f) => ({ url: f.url, remote_port: f.remote_port }));
     return s;
+  }
+
+  /** Expose a port inside the sandbox as http://127.0.0.1:<local_port>. */
+  async portForward(id: string, remotePort: number, localPort?: number): Promise<PortForwardResult> {
+    if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) throw new SandboxError("remote_port must be 1-65535");
+    if (remotePort === 9000) throw new SandboxError("port 9000 is the agent's lifecycle hook port and cannot be forwarded");
+    const client = this.client(id);
+    const existing = this.forwards.get(id)?.get(remotePort);
+    if (existing) {
+      return { sandbox_id: id, remote_port: remotePort, local_port: existing.local_port, url: existing.url, note: "already forwarding" };
+    }
+    client.tokens.addPort(remotePort);
+    await client.tokens.get();
+    const fw = await startPortForward({
+      endpoint: client.record.endpoint,
+      remotePort,
+      ...(localPort !== undefined ? { localPort } : {}),
+      getToken: () => client.tokens.get(),
+      log: this.log,
+    });
+    if (!this.forwards.has(id)) this.forwards.set(id, new Map());
+    this.forwards.get(id)!.set(remotePort, fw);
+    return {
+      sandbox_id: id,
+      remote_port: remotePort,
+      local_port: fw.local_port,
+      url: fw.url,
+      note: `The process inside the sandbox must listen on 0.0.0.0:${remotePort} (not 127.0.0.1). The forward lives as long as this MCP server runs.`,
+    };
+  }
+
+  async stopPortForward(id: string, remotePort?: number): Promise<{ sandbox_id: string; stopped: number[] }> {
+    const fw = this.forwards.get(id);
+    if (!fw) return { sandbox_id: id, stopped: [] };
+    const targets = remotePort === undefined ? [...fw.keys()] : fw.has(remotePort) ? [remotePort] : [];
+    for (const p of targets) {
+      await fw.get(p)?.close();
+      fw.delete(p);
+    }
+    if (fw.size === 0) this.forwards.delete(id);
+    return { sandbox_id: id, stopped: targets };
   }
 
   async resolveImageArn(): Promise<string> {
@@ -195,8 +250,11 @@ export class SandboxService {
     throw new SandboxError(`sandbox ${id} not ready after ${Math.round(timeoutMs / 1000)}s: ${lastErr}`);
   }
 
-  async exec(id: string, req: P.ExecRequest): Promise<P.ExecResponse> {
-    return this.client(id).request<P.ExecResponse>("POST", "/exec", { json: req, resumeWaitMs: this.config.resumeWaitS * 1000 });
+  async exec(id: string, req: P.ExecRequest): Promise<P.ExecResponse | P.BackgroundExecResponse> {
+    return this.client(id).request<P.ExecResponse | P.BackgroundExecResponse>("POST", "/exec", {
+      json: req,
+      resumeWaitMs: this.config.resumeWaitS * 1000,
+    });
   }
 
   async readFile(id: string, req: P.ReadFileRequest): Promise<P.ReadFileResponse> {
@@ -244,6 +302,7 @@ export class SandboxService {
       // Already gone (8h limit, idle policy) is fine; anything else should surface.
       if (!/ResourceNotFound|not found|TERMINATED/i.test(String(err))) throw err;
     }
+    await this.stopPortForward(id);
     this.deps.registry.remove(id);
     this.clients.delete(id);
     this.log(`terminated ${id}`);

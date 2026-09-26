@@ -32,6 +32,8 @@ export const defaultDeps: ClientDeps = {
 export class TokenManager {
   private token: string | null = null;
   private expiresAt = 0;
+  private readonly ports = new Set<number>([API_PORT]);
+  private portsChanged = false;
 
   constructor(
     private readonly api: MicrovmApi,
@@ -41,15 +43,28 @@ export class TokenManager {
     private readonly now: () => number = Date.now,
   ) {}
 
+  /** Allow another VM port (for port forwarding). The next token covers it. */
+  addPort(port: number): void {
+    if (!this.ports.has(port)) {
+      this.ports.add(port);
+      this.portsChanged = true;
+    }
+  }
+
+  allowedPorts(): number[] {
+    return [...this.ports].sort((a, b) => a - b);
+  }
+
   async get(): Promise<string> {
-    if (this.token && this.now() < this.expiresAt - this.refreshMarginS * 1000) return this.token;
+    if (this.token && !this.portsChanged && this.now() < this.expiresAt - this.refreshMarginS * 1000) return this.token;
     return this.refresh();
   }
 
   async refresh(): Promise<string> {
     const issuedAt = this.now();
-    this.token = await this.api.createAuthToken(this.microvmId, this.ttlMin, [API_PORT]);
+    this.token = await this.api.createAuthToken(this.microvmId, this.ttlMin, this.allowedPorts());
     this.expiresAt = issuedAt + this.ttlMin * 60_000;
+    this.portsChanged = false;
     return this.token;
   }
 

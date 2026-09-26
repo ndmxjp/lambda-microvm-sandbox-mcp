@@ -38,6 +38,7 @@ export function createMcpServer(service: SandboxService): McpServer {
       instructions: [
         "Isolated Linux sandboxes on AWS Lambda MicroVMs.",
         "Typical flow: sandbox_create -> sandbox_upload_dir (optional) -> sandbox_exec / file tools -> sandbox_download (optional) -> sandbox_destroy.",
+        "To run a web app: start it with sandbox_exec background=true listening on 0.0.0.0, then sandbox_port_forward its port and give the user the returned http://127.0.0.1 URL.",
         `Each sandbox is a fresh Firecracker VM (Amazon Linux 2023, git/python3/node/gcc preinstalled, cwd /workspace, user "sandbox" with passwordless sudo).`,
         "Sandboxes suspend automatically when idle and resume on the next call (the first call after a pause takes roughly 2 extra seconds).",
         `They are destroyed after at most ${Math.round(cfg.maxDurationS / 60)} minutes; copy anything you need out with sandbox_download or sandbox_read_file before that.`,
@@ -76,7 +77,7 @@ export function createMcpServer(service: SandboxService): McpServer {
     {
       title: "Run a shell command",
       description:
-        "Run a bash command inside the sandbox and return exit code, stdout and stderr (each capped at 1 MiB). Default cwd is /workspace and default user is `sandbox` (use `sudo` or as_root for root). Commands are killed after timeout_s.",
+        "Run a bash command inside the sandbox and return exit code, stdout and stderr (each capped at 1 MiB). Default cwd is /workspace and default user is `sandbox` (use `sudo` or as_root for root). Commands are killed after timeout_s. For servers and other long-running processes pass background=true: the command is started detached and the call returns its pid and a log file path you can read with sandbox_read_file.",
       inputSchema: {
         sandbox_id: sandboxId,
         command: z.string().min(1).describe("Command line passed to `bash -c`."),
@@ -85,10 +86,44 @@ export function createMcpServer(service: SandboxService): McpServer {
         env: z.record(z.string()).optional().describe("Extra environment variables."),
         stdin: z.string().optional().describe("Data written to the command's stdin."),
         as_root: z.boolean().optional().describe("Run as root instead of the sandbox user."),
+        background: z
+          .boolean()
+          .optional()
+          .describe("Start detached and return immediately with pid and log_path (for servers). Bind servers to 0.0.0.0."),
       },
       annotations: { destructiveHint: true, openWorldHint: true },
     },
     async ({ sandbox_id, ...req }) => run(() => service.exec(sandbox_id, req)),
+  );
+
+  server.registerTool(
+    "sandbox_port_forward",
+    {
+      title: "Forward a sandbox port to localhost",
+      description:
+        "Make a TCP port inside the sandbox reachable from this machine as http://127.0.0.1:<local_port> (HTTP and WebSocket). Use it to open a dev server or web app running in the sandbox in the user's browser. The app must listen on 0.0.0.0 inside the sandbox. Returns the local URL to give the user.",
+      inputSchema: {
+        sandbox_id: sandboxId,
+        remote_port: z.number().int().min(1).max(65535).describe("Port the app listens on inside the sandbox, e.g. 3000."),
+        local_port: z.number().int().min(1).max(65535).optional().describe("Local port to listen on; a free port is chosen when omitted."),
+      },
+      annotations: { destructiveHint: false, openWorldHint: true },
+    },
+    async ({ sandbox_id, remote_port, local_port }) => run(() => service.portForward(sandbox_id, remote_port, local_port)),
+  );
+
+  server.registerTool(
+    "sandbox_port_forward_stop",
+    {
+      title: "Stop a port forward",
+      description: "Stop forwarding one port (or all ports when remote_port is omitted) of a sandbox.",
+      inputSchema: {
+        sandbox_id: sandboxId,
+        remote_port: z.number().int().min(1).max(65535).optional(),
+      },
+      annotations: { idempotentHint: true },
+    },
+    async ({ sandbox_id, remote_port }) => run(() => service.stopPortForward(sandbox_id, remote_port)),
   );
 
   server.registerTool(

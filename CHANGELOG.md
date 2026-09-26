@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- `sandbox_exec` gains `background: true`: start servers and other long-running
+  processes detached, returning the pid and a log path instead of waiting.
+- New `sandbox_port_forward` / `sandbox_port_forward_stop`: a local reverse proxy
+  that injects the Lambda auth headers so a web app inside the sandbox opens at
+  `http://127.0.0.1:<port>` in your browser (HTTP and WebSocket).
+- Sandbox image 4.0 (agent with background execution) — run `setup` again.
+
 ## 0.1.1 (2026-09-26)
 
 - Rename the file-deletion tool from `sandbox_delete` to `sandbox_delete_path`

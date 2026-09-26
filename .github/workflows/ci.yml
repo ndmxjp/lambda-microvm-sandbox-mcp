@@ -63,7 +63,7 @@ jobs:
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
             | npx lambda-microvm-sandbox-mcp --region us-east-1 2>/dev/null \
-            | node -e 'let n=0; require("readline").createInterface({input:process.stdin}).on("line", l => { const m = JSON.parse(l); if (m.id === 2) n = m.result.tools.length; }).on("close", () => { if (n !== 13) { console.error("expected 13 tools, got", n); process.exit(1); } console.log("tools/list ok:", n); });'
+            | node -e 'let n=0; require("readline").createInterface({input:process.stdin}).on("line", l => { const m = JSON.parse(l); if (m.id === 2) n = m.result.tools.length; }).on("close", () => { if (n !== 15) { console.error("expected 15 tools, got", n); process.exit(1); } console.log("tools/list ok:", n); });'
 
   secrets:
     name: Secret scan (gitleaks)
