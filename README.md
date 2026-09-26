@@ -1,58 +1,163 @@
 # lambda-microvm-sandbox-mcp
 
-Isolated sandboxes for AI coding agents on **AWS Lambda MicroVMs**, exposed as
-an MCP server you can start with `npx lambda-microvm-sandbox-mcp`.
+[![CI](https://github.com/ndmxjp/lambda-microvm-sandbox-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ndmxjp/lambda-microvm-sandbox-mcp/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/lambda-microvm-sandbox-mcp)](https://www.npmjs.com/package/lambda-microvm-sandbox-mcp)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- [`packages/mcp-server`](packages/mcp-server) – the MCP server (published to npm). See its README for agent configuration and the tool list.
-- [`packages/sandbox-agent`](packages/sandbox-agent) – the HTTP agent baked into the MicroVM image (exec / file API on 8080, Lambda lifecycle hooks on 9000) and its `Dockerfile`.
-- `npx lambda-microvm-sandbox-mcp setup` – provisions the S3 bucket, build role and MicroVM image in the user's account from the assets shipped in the package (`cloudformation/prerequisites.yaml` for the IaC route).
-- [`scripts/smoke-test.ts`](scripts/smoke-test.ts) – end-to-end check against a real MicroVM (billable, needs `--yes`).
-- [`docs/research.md`](docs/research.md), [`docs/plan.md`](docs/plan.md) – research notes and the implementation plan.
+Give your AI coding agent a **disposable Linux machine** instead of your laptop.
 
-## Development
+`lambda-microvm-sandbox-mcp` is an [MCP](https://modelcontextprotocol.io) server
+that lets Claude Code, Kiro and other MCP clients create isolated sandboxes on
+**AWS Lambda MicroVMs**, run commands in them, move files in and out, and throw
+them away. Each sandbox is a fresh Firecracker VM in your own AWS account with
+git, Python, Node.js and a C toolchain preinstalled, and it boots in about two
+seconds.
 
-```bash
-npm install
-npm test            # builds both packages, then runs vitest (no AWS access needed)
-npm run typecheck
-npm run lint        # eslint (typescript-eslint recommended)
-npm run format      # prettier --write; CI runs format:check
+[日本語版 README](README.ja.md)
+
+## Why
+
+- **Real isolation.** Commands run in a Firecracker VM, not in a container on your
+  machine. A `rm -rf` or a malicious `npm install` cannot touch your files or
+  your credentials: the VM has no IAM role and only reaches the internet.
+- **Fast and cheap.** A sandbox is ready in ~2 s, suspends automatically while
+  the agent is thinking (no compute charges), resumes in ~1 s on the next
+  call, and is destroyed after at most 8 hours. A 2 GB sandbox costs about
+  $0.13 per hour while running.
+- **Nothing to host.** No servers, clusters or daemons. One `setup` command
+  builds the VM image in your account; the MCP server runs locally via `npx`.
+- **Made for agents.** Tools return structured results, long commands time out
+  cleanly, output is capped, and the agent is told exactly what to do when
+  something is missing.
+
+## How it works
+
+```
+Claude Code / Kiro ──stdio──▶ lambda-microvm-sandbox-mcp (npx, on your machine)
+                                  │  AWS SDK: RunMicrovm, tokens, suspend/resume/terminate
+                                  ▼
+                              AWS Lambda MicroVMs
+                                  │  HTTPS + per-VM auth token + per-VM secret
+                                  ▼
+                              Firecracker VM (Amazon Linux 2023)
+                                  └─ sandbox-agent: exec / files API, lifecycle hooks, sudo relay
 ```
 
-The tests launch the real sandbox-agent in-process and drive the MCP server
-against a fake Lambda control plane, so the whole exec / file / transfer /
-suspend / resume / destroy path is covered locally.
+The MCP server is the only thing that holds AWS credentials. It starts VMs from
+an image you built once, mints short-lived tokens, and talks to a small agent
+inside each VM. Commands run as an unprivileged `sandbox` user with passwordless
+`sudo`, so agents can `sudo dnf install` what they need without being able to
+kill the agent that controls the VM.
 
-## CI
+## Quick start
 
-| Workflow | Trigger | What it does |
-|---|---|---|
-| `ci.yml` / test | push to main, pull requests | typecheck, lint, format check, `npm test` on ubuntu (Node 20, 22) and macOS (Node 22); packs the npm tarball and runs it with `npx` over stdio to confirm `tools/list` returns 13 tools |
-| `ci.yml` / secrets | same | gitleaks over the full history (`.gitleaks.toml` allowlists the dummy test secrets) |
-| `ci.yml` / dockerfile | same | hadolint on the image Dockerfile |
-| `ci.yml` / image | push to main, or PRs labelled `image` | builds the Dockerfile for linux/arm64 under QEMU, boots it in Docker and drives `/ready`, `/run`, `/exec`, the sudo shim and `/validate` (`packages/sandbox-agent/image/ci-boot-test.sh`). Verifies the dnf package list without AWS |
-| `release.yml` | tag `v*` | test, check the tag matches `packages/mcp-server/package.json`, `npm publish --provenance`, GitHub release. Needs the `NPM_TOKEN` secret |
-| `e2e.yml` | manual (`workflow_dispatch`) | `setup` + `doctor` + smoke test against a real MicroVM using an OIDC role from the `AWS_ROLE_ARN` repository variable. Billable, so never automatic |
-
-Dependabot keeps npm dependencies (AWS SDK grouped) and actions up to date weekly.
-
-## Building the image from this checkout
+**1. Build the sandbox image in your AWS account** (once, about three minutes).
+MicroVM images cannot be shared between accounts, so `setup` creates a private
+S3 bucket, a least-privilege build role and the image from assets shipped in
+the npm package. It shows the plan and asks before creating anything.
 
 ```bash
-npm run build
-npm run build-image -- --region ap-northeast-1 --dry-run   # plan only, read-only AWS calls
-npm run build-image -- --region ap-northeast-1             # bucket + role + image (asks first)
-npm run doctor -- --region ap-northeast-1
+npx lambda-microvm-sandbox-mcp setup --region ap-northeast-1
+npx lambda-microvm-sandbox-mcp doctor --region ap-northeast-1   # verify
 ```
 
-Image snapshots are billed for storage (about $0.08/GB-month, minimum one
-week). Old versions can be deleted with
-`aws lambda-microvms delete-microvm-image-version`.
+Prefer infrastructure as code? Deploy
+[`cloudformation/prerequisites.yaml`](packages/mcp-server/cloudformation/prerequisites.yaml)
+and pass its outputs: `setup --bucket <name> --build-role-arn <arn>`.
 
-## Trying it end to end
+**2. Register the server with your agent.**
 
-```bash
-npm run smoke-test -- --yes --region ap-northeast-1   # one VM (~$0.13/h at 2 GB), exercised then terminated
+Claude Code (`.mcp.json` in your project):
+
+```json
+{
+  "mcpServers": {
+    "lambda-sandbox": {
+      "command": "npx",
+      "args": ["-y", "lambda-microvm-sandbox-mcp", "--region", "ap-northeast-1"]
+    }
+  }
+}
 ```
 
-`.mcp.json` in this repository points Claude Code at the local build.
+Kiro (`.kiro/settings/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "lambda-sandbox": {
+      "command": "npx",
+      "args": ["-y", "lambda-microvm-sandbox-mcp"],
+      "env": { "AWS_REGION": "ap-northeast-1" },
+      "autoApprove": ["sandbox_exec", "sandbox_read_file", "sandbox_list_files", "sandbox_status", "sandbox_list"]
+    }
+  }
+}
+```
+
+The server uses your normal AWS credential chain (`AWS_PROFILE`, SSO, env vars).
+
+**3. Ask your agent to use it.**
+
+> Create a sandbox, upload this project into it, run the test suite there and
+> report the failures. Destroy the sandbox when you are done.
+
+The agent will call `sandbox_create`, `sandbox_upload_dir`, `sandbox_exec`,
+read what it needs, and finish with `sandbox_destroy`.
+
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `sandbox_create` | Start a VM and wait until it accepts commands. Returns `sandbox_id`. |
+| `sandbox_exec` | Run a bash command with `cwd`, `timeout_s`, `env`, `stdin`, `as_root`. Returns exit code, stdout, stderr. |
+| `sandbox_read_file` / `sandbox_write_file` / `sandbox_list_files` / `sandbox_delete` | File operations, absolute or relative to `/workspace`. |
+| `sandbox_upload_dir` / `sandbox_download` | Move directories in and out as tar.gz (`.git`, `node_modules`, … excluded by default). |
+| `sandbox_suspend` / `sandbox_resume` | Pause compute billing while keeping state; suspended VMs auto-resume on the next call. |
+| `sandbox_status` / `sandbox_list` | State and reason; VMs that Lambda already terminated are reported once. |
+| `sandbox_destroy` | Terminate the VM. |
+
+Every option of the server has a flag and an environment variable; run
+`npx lambda-microvm-sandbox-mcp --help`. The full reference lives in
+[`packages/mcp-server/README.md`](packages/mcp-server/README.md).
+
+## Cost and limits
+
+| | |
+|---|---|
+| Running sandbox (2 GB / 1 vCPU, ARM) | ≈ $0.13 per hour, billed per second |
+| Suspended sandbox | no compute charge |
+| Image snapshot storage | ≈ $0.08 per GB-month, minimum one week |
+| Sandbox lifetime | `--max-duration`, default 4 h, hard cap 8 h |
+| Auto-suspend | after `--idle` seconds (default 600) without traffic |
+| Bandwidth to a 2 GB sandbox | about 4 MB/s, so keep uploads small |
+
+The agent is reminded in every tool description to destroy sandboxes it no
+longer needs. `sandbox_list` shows anything still running.
+
+## Security model
+
+- The VM has **no IAM execution role**. Your AWS credentials stay on your
+  machine; the sandbox can only reach the public internet (or nothing, with
+  `--no-internet-egress`).
+- Every request to a VM carries a Lambda-issued token that is valid for one VM
+  and one port, plus a per-VM secret generated at creation and delivered
+  through the `/run` lifecycle hook. Neither is ever written into the image.
+- Commands run as user `sandbox`. `sudo` works, but as a shim that relays to
+  the root agent over a group-restricted unix socket, because the container runs
+  with `no_new_privileges`. `as_root: true` on `sandbox_exec` does the same.
+- Known sandboxes are stored in `~/.lambda-sandbox/sandboxes.json` (mode 0600).
+- The image is Amazon Linux 2023 minimal, so `dnf` is really `microdnf` and the
+  default `python3` is 3.9. Add what you need with `sudo dnf install -y …`.
+
+## Repository layout
+
+- [`packages/mcp-server`](packages/mcp-server) – the npm package: MCP server, `setup`, `doctor`, CloudFormation template.
+- [`packages/sandbox-agent`](packages/sandbox-agent) – the agent baked into the VM image and its `Dockerfile`.
+- [`docs/`](docs) – research notes and the implementation log.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development, tests, CI and releases.
+
+## License
+
+[MIT](LICENSE)
