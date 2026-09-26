@@ -1,0 +1,28 @@
+{
+  "name": "lambda-microvm-sandbox-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w packages/sandbox-agent && npm run build -w packages/mcp-server",
+    "typecheck": "tsc -p packages/sandbox-agent && tsc -p packages/mcp-server --noEmit && tsc -p scripts --noEmit",
+    "test": "npm run build && vitest run",
+    "test:watch": "vitest",
+    "build-image": "tsx scripts/build-image.ts",
+    "smoke-test": "tsx scripts/smoke-test.ts"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
+    "@aws-sdk/client-sts": "^3.1141.0",
+    "@types/node": "^22.15.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}
