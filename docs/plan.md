@@ -259,3 +259,11 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - `scripts/build-image.ts` は削除し、`npm run build-image` は `setup` の別名に
 - テスト 59 件（ZIP ライタは `unzip -t` で検証、setup はフェイククライアントで作成／再利用／IAM リトライ／失敗時ログ／確認拒否をカバー）
 - 実機確認: `doctor` は OK、`setup --dry-run` は新規バケットとロールの作成と 3.0 のビルドを提案（実行は別途確認）
+
+## 14. setup の実機検証（2026-09-26）: PASSED
+
+- `setup --region ap-northeast-1 --yes`: バケット `lambda-microvm-sandbox-123456789012-ap-northeast-1` とロール `LambdaMicrovmSandboxBuildRole` を新規作成し、zip（38KB）を置いてイメージ 3.0 をビルド。IAM 反映待ちのリトライは発生せず、約 3 分で SUCCESSFUL
+- 作成物の確認（読み取り API）: Public Access Block 4 項目すべて true、SSE-S3 + Bucket Key、ライフサイクル 3 ルール、信頼ポリシーに `aws:SourceAccount`、権限はバケット配下の GetObject と `/aws/lambda/microvms/*` へのログ書き込みのみ
+- 2 回目の `setup --dry-run` は既存バケットとロールを再利用する表示になり、冪等性を確認。`doctor` は 3.0 を latest ACTIVE と表示
+- 3.0 での smoke test: create 2.5 秒、exec 99 ms、sudo シム 429 ms、`sudo dnf install -y bc` 21 秒で `echo 2+3 | bc` → 5、suspend 後の exec 594 ms、destroy 済み
+- 残っている旧リソース: イメージ 2.0（削除候補）、getting-started 由来の `MicrovmBuildRole` と `lambda-microvm-test-123456789012-apne1`（本プロジェクトでは未使用）
