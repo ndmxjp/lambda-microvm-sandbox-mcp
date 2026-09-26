@@ -27,7 +27,7 @@ jobs:
           - os: macos-latest
             node: 22
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -69,7 +69,7 @@ jobs:
     name: Dockerfile lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: packages/sandbox-agent/image/Dockerfile
@@ -86,7 +86,7 @@ jobs:
     timeout-minutes: 45
     if: github.event_name == 'push' || contains(join(github.event.pull_request.labels.*.name, ','), 'image')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
