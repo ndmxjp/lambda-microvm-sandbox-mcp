@@ -1,8 +1,9 @@
 name: Release
 
 # Publishes packages/mcp-server to npm when a tag like v0.1.0 is pushed.
-# Requires the NPM_TOKEN repository secret (an npm automation token) and the
-# tag to match the version in packages/mcp-server/package.json.
+# Authentication uses npm Trusted Publishing (OIDC): the package on npmjs.com
+# trusts this repository's release.yml, so no NPM_TOKEN secret is needed. The
+# tag must match the version in packages/mcp-server/package.json.
 
 on:
   push:
@@ -22,6 +23,8 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      - run: npm install -g npm@latest && npm --version
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -30,11 +33,9 @@ jobs:
           pkg=$(node -p "require('./packages/mcp-server/package.json').version")
           tag="${GITHUB_REF_NAME#v}"
           if [ "$pkg" != "$tag" ]; then echo "package.json version $pkg != tag $tag"; exit 1; fi
-      - name: Publish to npm
+      - name: Publish to npm (OIDC trusted publisher, with provenance)
         working-directory: packages/mcp-server
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: GitHub release
         uses: softprops/action-gh-release@v2
         with:

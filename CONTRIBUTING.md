@@ -32,7 +32,7 @@ runs locally. `setup` is tested against fake AWS clients as well.
 | `ci.yml` / secrets | same | gitleaks over the full history (`.gitleaks.toml` allowlists the dummy test secrets) |
 | `ci.yml` / dockerfile | same | hadolint on the image Dockerfile |
 | `ci.yml` / image | push to main, or PRs labelled `image` | builds the Dockerfile for linux/arm64 under QEMU, boots it in Docker and drives `/ready`, `/run`, `/exec`, the sudo shim and `/validate` (`packages/sandbox-agent/image/ci-boot-test.sh`). Verifies the dnf package list without AWS. About six minutes |
-| `release.yml` | tag `v*` | test, check the tag matches `packages/mcp-server/package.json`, `npm publish --provenance`, GitHub release. Needs the `NPM_TOKEN` secret |
+| `release.yml` | tag `v*` | test, check the tag matches `packages/mcp-server/package.json`, `npm publish --provenance` via npm Trusted Publishing (OIDC, no token secret), GitHub release |
 | `e2e.yml` | manual (`workflow_dispatch`) | `setup` + `doctor` + smoke test against a real MicroVM using an OIDC role from the `AWS_ROLE_ARN` repository variable. Billable, so never automatic |
 
 Dependabot keeps npm dependencies (AWS SDK grouped) and actions up to date weekly.
@@ -65,8 +65,10 @@ Claude Code session opened in this directory.
 1. Bump `version` in `packages/mcp-server/package.json` and commit.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. `release.yml` runs the tests, publishes to npm with provenance and creates a
-   GitHub release. Users pick up the new image assets by running
-   `npx lambda-microvm-sandbox-mcp setup` again.
+   GitHub release. Publishing authenticates through npm Trusted Publishing: the
+   package settings on npmjs.com trust `ndmxjp/lambda-microvm-sandbox-mcp` /
+   `release.yml`, so no npm token is stored in GitHub. Users pick up the new
+   image assets by running `npx lambda-microvm-sandbox-mcp setup` again.
 
 ## Conventions
 
