@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Prerequisites for lambda-microvm-sandbox-mcp: the S3 bucket that holds the
+  MicroVM image code artifact and the IAM role Lambda assumes to build the image.
+  After deploying, run
+    npx lambda-microvm-sandbox-mcp setup --region <region> --bucket <BucketName> --build-role-arn <BuildRoleArn>
+  Use this instead of letting `setup` create the resources when your organisation
+  requires infrastructure to be managed as code.
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: ""
+    Description: Optional bucket name. Leave empty for lambda-microvm-sandbox-<account>-<region>.
+
+Conditions:
+  HasBucketName: !Not [!Equals [!Ref BucketName, ""]]
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !If
+        - HasBucketName
+        - !Ref BucketName
+        - !Sub lambda-microvm-sandbox-${AWS::AccountId}-${AWS::Region}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-image-artifacts
+            Status: Enabled
+            Prefix: microvm-images/
+            ExpirationInDays: 30
+          - Id: expire-transfers
+            Status: Enabled
+            Prefix: lambda-sandbox-transfers/
+            ExpirationInDays: 1
+          - Id: abort-multipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Build role for lambda-microvm-sandbox-mcp MicroVM images
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: MicrovmImageBuild
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${ArtifactBucket.Arn}/microvm-images/*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/microvms/*
+
+Outputs:
+  BucketName:
+    Value: !Ref ArtifactBucket
+  BuildRoleArn:
+    Value: !GetAtt BuildRole.Arn
+  SetupCommand:
+    Value: !Sub npx lambda-microvm-sandbox-mcp setup --region ${AWS::Region} --bucket ${ArtifactBucket} --build-role-arn ${BuildRole.Arn}

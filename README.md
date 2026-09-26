@@ -5,7 +5,7 @@ an MCP server you can start with `npx lambda-microvm-sandbox-mcp`.
 
 - [`packages/mcp-server`](packages/mcp-server) – the MCP server (published to npm). See its README for agent configuration and the tool list.
 - [`packages/sandbox-agent`](packages/sandbox-agent) – the HTTP agent baked into the MicroVM image (exec / file API on 8080, Lambda lifecycle hooks on 9000) and its `Dockerfile`.
-- [`scripts/build-image.ts`](scripts/build-image.ts) – bundles the agent, uploads the zip to S3 and creates/updates the MicroVM image.
+- `npx lambda-microvm-sandbox-mcp setup` – provisions the S3 bucket, build role and MicroVM image in the user's account from the assets shipped in the package (`cloudformation/prerequisites.yaml` for the IaC route).
 - [`scripts/smoke-test.ts`](scripts/smoke-test.ts) – end-to-end check against a real MicroVM (billable, needs `--yes`).
 - [`docs/research.md`](docs/research.md), [`docs/plan.md`](docs/plan.md) – research notes and the implementation plan.
 
@@ -21,24 +21,23 @@ The tests launch the real sandbox-agent in-process and drive the MCP server
 against a fake Lambda control plane, so the whole exec / file / transfer /
 suspend / resume / destroy path is covered locally.
 
-## Building the image
+## Building the image from this checkout
 
 ```bash
-export AWS_REGION=ap-northeast-1
-export SANDBOX_ARTIFACT_BUCKET=<bucket in the same region>
-export SANDBOX_BUILD_ROLE_ARN=arn:aws:iam::<account>:role/MicrovmBuildRole
-
-npm run build-image -- --dry-run   # show the zip and parameters, no AWS calls
-npm run build-image -- --yes       # upload, create/update the image, wait for ACTIVE
+npm run build
+npm run build-image -- --region ap-northeast-1 --dry-run   # plan only, read-only AWS calls
+npm run build-image -- --region ap-northeast-1             # bucket + role + image (asks first)
+npm run doctor -- --region ap-northeast-1
 ```
 
-Image snapshots are billed for storage (minimum one week), so the script never
-calls AWS without `--yes`. `--prune-versions N --yes` deletes all but the newest
-`N` versions.
+Image snapshots are billed for storage (about $0.08/GB-month, minimum one
+week). Old versions can be deleted with
+`aws lambda-microvms delete-microvm-image-version`.
 
 ## Trying it end to end
 
 ```bash
-export SANDBOX_IMAGE_ARN=arn:aws:lambda:ap-northeast-1:<account>:microvm-image:sandbox-agent
-npm run smoke-test -- --yes        # starts one VM (~$0.13/h at 2 GB), exercises it, terminates it
+npm run smoke-test -- --yes --region ap-northeast-1   # one VM (~$0.13/h at 2 GB), exercised then terminated
 ```
+
+`.mcp.json` in this repository points Claude Code at the local build.

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { DEFAULTS, loadConfig, parseArgs, type Config } from "../src/config.js";
+import { DEFAULTS, imageArnFor, loadConfig, parseArgs, type Config } from "../src/config.js";
 import { Registry } from "../src/registry.js";
 import { SandboxService } from "../src/service.js";
 import { SandboxClient, SandboxError, TokenManager } from "../src/client.js";
@@ -13,6 +13,8 @@ import { createMcpServer } from "../src/server.js";
 import { FakeMicrovmApi, FakeTransferStore } from "./fake-aws.js";
 
 const IMAGE_ARN = "arn:aws:lambda:ap-northeast-1:123456789012:microvm-image:sandbox-agent";
+
+const accountId = async (): Promise<string> => "123456789012";
 
 function testConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -41,8 +43,15 @@ describe("config", () => {
     expect(c.stateFile.endsWith(path.join(".lambda-sandbox", "sandboxes.json"))).toBe(true);
   });
 
-  it("requires an image arn and rejects bad values", () => {
-    expect(() => loadConfig([], {})).toThrow(/SANDBOX_IMAGE_ARN/);
+  it("works without an image arn, needing only a region, and rejects bad values", () => {
+    expect(() => loadConfig([], {})).toThrow(/region/);
+    const byName = loadConfig(["--region", "eu-west-1"], {});
+    expect(byName.imageArn).toBeUndefined();
+    expect(byName.imageName).toBe("sandbox-agent");
+    expect(imageArnFor(byName, "111122223333")).toBe("arn:aws:lambda:eu-west-1:111122223333:microvm-image:sandbox-agent");
+    expect(loadConfig([], { SANDBOX_IMAGE_NAME: "x" }, "ap-south-1").region).toBe("ap-south-1");
+    expect(loadConfig([], { AWS_REGION: "us-east-2" }, "ap-south-1").region).toBe("us-east-2");
+    expect(parseArgs(["--dry-run", "--yes"]).values).toEqual({ "dry-run": true, yes: true });
     expect(() => loadConfig(["--image-arn", IMAGE_ARN, "--token-ttl", "90"], {})).toThrow(/60 minutes/);
     expect(() => loadConfig(["--image-arn", IMAGE_ARN, "--max-duration", "99999"], {})).toThrow(/28800/);
     expect(() => parseArgs(["--image-arn"])).toThrow(/missing value/);
@@ -185,7 +194,7 @@ describe("SandboxService end to end against an in-process agent", () => {
   beforeAll(() => {
     api = new FakeMicrovmApi();
     registryFile = path.join(scratch, "e2e", "sandboxes.json");
-    service = new SandboxService({ config: testConfig(), api, registry: new Registry(registryFile), log: () => undefined });
+    service = new SandboxService({ config: testConfig(), api, accountId, registry: new Registry(registryFile), log: () => undefined });
   });
   afterAll(() => api.cleanup());
 
@@ -276,6 +285,7 @@ describe("SandboxService end to end against an in-process agent", () => {
     const svc = new SandboxService({
       config: testConfig({ readyTimeoutS: 2 }),
       api: slow,
+      accountId,
       registry: new Registry(null),
       log: () => undefined,
     });
@@ -288,8 +298,21 @@ describe("SandboxService end to end against an in-process agent", () => {
   it("fails clearly when the image has no active version", async () => {
     const noImage = new FakeMicrovmApi();
     noImage.latestVersion = undefined;
-    const svc = new SandboxService({ config: testConfig(), api: noImage, registry: new Registry(null), log: () => undefined });
-    await expect(svc.create()).rejects.toThrow(/no ACTIVE version/);
+    const svc = new SandboxService({ config: testConfig(), api: noImage, accountId, registry: new Registry(null), log: () => undefined });
+    await expect(svc.create()).rejects.toThrow(/no ACTIVE version yet; run `npx lambda-microvm-sandbox-mcp setup --region ap-northeast-1`/);
+  });
+
+  it("derives the image arn from the account when none is configured and explains a missing image", async () => {
+    const missing = new FakeMicrovmApi();
+    missing.latestActiveImageVersion = async () => {
+      const err = new Error("not found");
+      err.name = "ResourceNotFoundException";
+      throw err;
+    };
+    const cfg = loadConfig(["--region", "us-east-1", "--image-name", "custom"], {});
+    const svc = new SandboxService({ config: cfg, api: missing, accountId, registry: new Registry(null), log: () => undefined });
+    expect(await svc.resolveImageArn()).toBe("arn:aws:lambda:us-east-1:123456789012:microvm-image:custom");
+    await expect(svc.create()).rejects.toThrow(/does not exist; run `npx lambda-microvm-sandbox-mcp setup --region us-east-1 --image-name custom`/);
   });
 });
 
@@ -321,6 +344,7 @@ describe("S3 relay mode", () => {
     service = new SandboxService({
       config: testConfig({ transferBucket: "fake-bucket" }),
       api,
+      accountId,
       registry: new Registry(null),
       store: new FakeTransferStore(base),
       log: () => undefined,
@@ -353,7 +377,7 @@ describe("MCP surface", () => {
 
   beforeAll(async () => {
     api = new FakeMicrovmApi();
-    const service = new SandboxService({ config: testConfig(), api, registry: new Registry(null), log: () => undefined });
+    const service = new SandboxService({ config: testConfig(), api, accountId, registry: new Registry(null), log: () => undefined });
     const server = createMcpServer(service);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);

@@ -10,11 +10,12 @@
   },
   "scripts": {
     "build": "npm run build -w packages/sandbox-agent && npm run build -w packages/mcp-server",
-    "typecheck": "tsc -p packages/sandbox-agent && tsc -p packages/mcp-server --noEmit && tsc -p scripts --noEmit",
+    "typecheck": "tsc -p packages/sandbox-agent --noEmit && tsc -p packages/mcp-server --noEmit && tsc -p scripts --noEmit",
     "test": "npm run build && vitest run",
     "test:watch": "vitest",
-    "build-image": "tsx scripts/build-image.ts",
-    "smoke-test": "tsx scripts/smoke-test.ts"
+    "build-image": "node packages/mcp-server/dist/index.js setup",
+    "smoke-test": "tsx scripts/smoke-test.ts",
+    "doctor": "node packages/mcp-server/dist/index.js doctor"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",

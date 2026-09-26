@@ -5,8 +5,9 @@
  * timings, and ALWAYS terminates the VM at the end. Billable: refuses to run
  * without --yes.
  *
- *   SANDBOX_IMAGE_ARN=arn:... npm run smoke-test -- --yes
+ *   npm run smoke-test -- --yes --region ap-northeast-1
  */
+import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import { RealMicrovmApi } from "../packages/mcp-server/src/aws.ts";
 import { loadConfig } from "../packages/mcp-server/src/config.ts";
 import { Registry } from "../packages/mcp-server/src/registry.ts";
@@ -19,7 +20,13 @@ if (!argv.includes("--yes")) {
 }
 const config = loadConfig(argv.filter((a) => a !== "--yes"));
 const api = new RealMicrovmApi(config.region);
-const service = new SandboxService({ config, api, registry: new Registry(null) });
+const sts = new STSClient({ region: config.region });
+const service = new SandboxService({
+  config,
+  api,
+  accountId: async () => (await sts.send(new GetCallerIdentityCommand({}))).Account as string,
+  registry: new Registry(null),
+});
 const timings: Record<string, number> = {};
 const t = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
   const s = Date.now();
