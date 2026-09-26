@@ -246,3 +246,16 @@ Herdr の別ペインで `claude-pub --mcp-config .mcp.json --allowedTools mcp__
 - 指摘 1: macOS からの upload に AppleDouble `._*` が混入 → `COPYFILE_DISABLE=1` と既定 exclude `._*` を追加して修正
 - 指摘 2: 「upload/download に約 10 秒、resume に約 10 秒」はエージェント側の壁時計で、Claude のターン往復（約 10 秒）を含む。サーバー側の実測（ready_after 1.8 秒、smoke test の resume 2.1 秒）と整合しており、実装の問題ではない
 - `.mcp.json` をプロジェクト直下に追加（ローカルの dist を `node` で起動、`--max-duration 1800`）
+
+## 13. OSS 配布向けの変更（2026-09-26）
+
+MicroVM イメージはアカウント間で共有できない（リソースポリシー等の API がない）ため、利用者ごとに自アカウントでビルドする必要がある。その手順を npm パッケージだけで完結させた。
+
+- `npx lambda-microvm-sandbox-mcp setup --region <r>`: STS でアカウントを取り、S3 バケット（`lambda-microvm-sandbox-<account>-<region>`、PAB、SSE-S3、30 日で削除）、ビルドロール（`LambdaMicrovmSandboxBuildRole`、`aws:SourceAccount` 条件付き、権限はバケットの GetObject と MicroVM ビルドログのみ）、イメージを冪等に作成。Dockerfile / agent.mjs / sudo.mjs はパッケージ内 `image/` に同梱し、依存なしの ZIP ライタで zip 化。`--dry-run` は読み取りのみ、TTY では実行前に確認、IAM 反映待ちのリトライあり。既存のバケット・ロールは `--bucket` / `--build-role-arn` で指定可
+- `cloudformation/prerequisites.yaml`: バケットとロールを IaC で入れたい組織向け。出力にそのまま実行できる setup コマンドを含む
+- `--image-arn` は任意になった。既定はイメージ名 `sandbox-agent` で、`arn:aws:lambda:<region>:<account>:microvm-image:<name>` を起動時に組み立てる。リージョンは `--region` → イメージ ARN → `AWS_REGION` → プロファイル既定
+- `npx lambda-microvm-sandbox-mcp doctor`: 認証情報、リージョン対応、イメージの有無と ACTIVE バージョン、設定を表示
+- イメージが無いときの `sandbox_create` のエラーに `setup` コマンドをそのまま含める
+- `scripts/build-image.ts` は削除し、`npm run build-image` は `setup` の別名に
+- テスト 59 件（ZIP ライタは `unzip -t` で検証、setup はフェイククライアントで作成／再利用／IAM リトライ／失敗時ログ／確認拒否をカバー）
+- 実機確認: `doctor` は OK、`setup --dry-run` は新規バケットとロールの作成と 3.0 のビルドを提案（実行は別途確認）

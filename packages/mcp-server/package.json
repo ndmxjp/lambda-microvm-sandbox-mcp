@@ -11,18 +11,23 @@
   "types": "./dist/server.d.ts",
   "files": [
     "dist",
+    "image",
+    "cloudformation",
     "README.md"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p . && chmod +x dist/index.js",
+    "build": "tsc -p . && node scripts/copy-image.mjs && chmod +x dist/index.js",
     "typecheck": "tsc -p . --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
+    "@aws-sdk/client-iam": "^3.1141.0",
     "@aws-sdk/client-lambda-microvms": "^3.1141.0",
     "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/client-sts": "^3.1141.0",
     "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^3.25.0"

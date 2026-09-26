@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { MicrovmApi, MicrovmInfo, TransferStore } from "./aws.js";
 import { SandboxClient, SandboxError, TokenManager, defaultDeps, type ClientDeps } from "./client.js";
-import { connectorArn, type Config } from "./config.js";
+import { connectorArn, imageArnFor, setupHint, type Config } from "./config.js";
 import { Registry, type SandboxRecord } from "./registry.js";
 import { DEFAULT_EXCLUDES, downloadPath, uploadDirectory, type DownloadResult, type UploadResult } from "./transfer.js";
 import type * as P from "@lambda-microvm-sandbox/agent/protocol";
@@ -9,6 +9,8 @@ import type * as P from "@lambda-microvm-sandbox/agent/protocol";
 export interface ServiceDeps {
   config: Config;
   api: MicrovmApi;
+  /** Caller's AWS account id, used to derive the image ARN when none is configured. */
+  accountId: () => Promise<string>;
   registry: Registry;
   store?: TransferStore | null;
   client?: Partial<ClientDeps>;
@@ -58,6 +60,7 @@ export class SandboxService {
   private readonly clientDeps: ClientDeps;
   private readonly log: (msg: string) => void;
   private readonly store: { s3: TransferStore; prefix: string } | null;
+  private imageArnCache: string | undefined;
 
   constructor(private readonly deps: ServiceDeps) {
     this.clientDeps = { ...defaultDeps, ...(deps.client ?? {}) };
@@ -93,10 +96,24 @@ export class SandboxService {
     return s;
   }
 
-  async resolveImageVersion(): Promise<string> {
+  async resolveImageArn(): Promise<string> {
+    if (this.imageArnCache) return this.imageArnCache;
+    this.imageArnCache = this.config.imageArn ?? imageArnFor(this.config, await this.deps.accountId());
+    return this.imageArnCache;
+  }
+
+  async resolveImageVersion(imageArn: string): Promise<string> {
     if (this.config.imageVersion) return this.config.imageVersion;
-    const v = await this.deps.api.latestActiveImageVersion(this.config.imageArn);
-    if (!v) throw new SandboxError(`image ${this.config.imageArn} has no ACTIVE version; build it first (npm run build-image)`);
+    let v: string | undefined;
+    try {
+      v = await this.deps.api.latestActiveImageVersion(imageArn);
+    } catch (err) {
+      if (/NotFound/i.test(String((err as { name?: string }).name ?? err))) {
+        throw new SandboxError(`MicroVM image ${imageArn} does not exist; ${setupHint(this.config)}`);
+      }
+      throw err;
+    }
+    if (!v) throw new SandboxError(`image ${imageArn} has no ACTIVE version yet; ${setupHint(this.config)}`);
     return v;
   }
 
@@ -104,13 +121,14 @@ export class SandboxService {
     const cfg = this.config;
     const maxDuration = Math.min(opts.max_duration_s ?? cfg.maxDurationS, 28_800);
     const egress = opts.internet_egress ?? cfg.internetEgress;
-    const imageVersion = await this.resolveImageVersion();
+    const imageArn = await this.resolveImageArn();
+    const imageVersion = await this.resolveImageVersion(imageArn);
     const secret = randomBytes(32).toString("base64url");
     const payload: P.RunHookPayload = { secret };
     const started = this.clientDeps.now();
 
     const info = await this.deps.api.runMicrovm({
-      imageArn: cfg.imageArn,
+      imageArn,
       imageVersion,
       runHookPayload: JSON.stringify(payload),
       maximumDurationInSeconds: maxDuration,
@@ -126,7 +144,7 @@ export class SandboxService {
       name: opts.name ?? null,
       endpoint: normalizeEndpoint(info.endpoint, info.microvmId),
       secret,
-      image_arn: cfg.imageArn,
+      image_arn: imageArn,
       image_version: imageVersion,
       created_at: createdAt.toISOString(),
       expires_at: new Date(createdAt.getTime() + maxDuration * 1000).toISOString(),

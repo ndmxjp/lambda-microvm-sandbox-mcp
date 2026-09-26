@@ -10,26 +10,41 @@ Kiro / Claude Code ──stdio──▶ lambda-microvm-sandbox-mcp ──AWS SDK
                                         └──HTTPS + auth token──▶ sandbox-agent inside the VM
 ```
 
-## Prerequisites
+## Quick start
 
-1. A built MicroVM image containing the sandbox-agent (see the repository's
-   `npm run build-image`). Note its ARN.
-2. AWS credentials on the machine running the MCP server with permission for
-   `lambda:RunMicrovm`, `GetMicrovm`, `ListMicrovms`, `SuspendMicrovm`,
-   `ResumeMicrovm`, `TerminateMicrovm`, `CreateMicrovmAuthToken`,
-   `GetMicrovmImage`, plus `lambda:PassNetworkConnector` for the managed
-   connectors. Credentials never enter the VM.
+MicroVM images cannot be shared between AWS accounts, so each account builds
+its own once. The Dockerfile and agent are inside this package; `setup` does
+the rest (S3 bucket, build role, image build, about three minutes):
+
+```bash
+# 1. AWS credentials must be available (profile, SSO, env vars).
+npx lambda-microvm-sandbox-mcp setup --region ap-northeast-1
+# 2. Check everything the server needs.
+npx lambda-microvm-sandbox-mcp doctor --region ap-northeast-1
+```
+
+`setup` prints what it will create and asks before doing it (`--dry-run` to
+only look, `--yes` to skip the question). Run it again after upgrading the
+package to build a new image version. If your organisation manages
+infrastructure as code, deploy `cloudformation/prerequisites.yaml` instead and
+pass its outputs: `setup --bucket <name> --build-role-arn <arn>`.
+
+Permissions: `setup` needs to create an S3 bucket, an IAM role and a MicroVM
+image. The server itself needs `lambda:RunMicrovm`, `GetMicrovm`,
+`ListMicrovms`, `SuspendMicrovm`, `ResumeMicrovm`, `TerminateMicrovm`,
+`CreateMicrovmAuthToken`, `GetMicrovmImage`, `lambda:PassNetworkConnector` and
+`sts:GetCallerIdentity`. Credentials never enter the VM.
 
 ## Configure your agent
 
-Claude Code (`~/.claude.json` or `.mcp.json`):
+Claude Code (`.mcp.json` in the project, or `~/.claude.json`):
 
 ```json
 {
   "mcpServers": {
     "lambda-sandbox": {
       "command": "npx",
-      "args": ["-y", "lambda-microvm-sandbox-mcp", "--image-arn", "arn:aws:lambda:ap-northeast-1:123456789012:microvm-image:sandbox-agent"],
+      "args": ["-y", "lambda-microvm-sandbox-mcp", "--region", "ap-northeast-1"],
       "env": { "AWS_PROFILE": "default" }
     }
   }
@@ -44,20 +59,20 @@ Kiro (`.kiro/settings/mcp.json`):
     "lambda-sandbox": {
       "command": "npx",
       "args": ["-y", "lambda-microvm-sandbox-mcp"],
-      "env": {
-        "SANDBOX_IMAGE_ARN": "arn:aws:lambda:ap-northeast-1:123456789012:microvm-image:sandbox-agent",
-        "AWS_PROFILE": "default"
-      },
+      "env": { "AWS_REGION": "ap-northeast-1", "AWS_PROFILE": "default" },
       "autoApprove": ["sandbox_exec", "sandbox_read_file", "sandbox_list_files", "sandbox_status", "sandbox_list"]
     }
   }
 }
 ```
 
-Run `npx lambda-microvm-sandbox-mcp --help` for every option. All options have
-an environment-variable twin (`SANDBOX_IMAGE_ARN`, `SANDBOX_MAX_DURATION_S`,
-`SANDBOX_IDLE_S`, `SANDBOX_SUSPENDED_S`, `SANDBOX_INTERNET_EGRESS`,
-`SANDBOX_TRANSFER_BUCKET`, `SANDBOX_STATE_FILE`, `SANDBOX_TOKEN_TTL_MIN`).
+The image is found by name (`sandbox-agent` in your account and region). Use
+`--image-name` if you built it under another name, or `--image-arn` to point at
+a specific ARN. Run `npx lambda-microvm-sandbox-mcp --help` for every option;
+all have environment-variable twins (`SANDBOX_IMAGE_NAME`, `SANDBOX_IMAGE_ARN`,
+`SANDBOX_MAX_DURATION_S`, `SANDBOX_IDLE_S`, `SANDBOX_SUSPENDED_S`,
+`SANDBOX_INTERNET_EGRESS`, `SANDBOX_TRANSFER_BUCKET`, `SANDBOX_STATE_FILE`,
+`SANDBOX_TOKEN_TTL_MIN`).
 
 ## Tools
 

@@ -5,3 +5,4 @@ dist/
 *.log
 build/
 .env
+packages/mcp-server/image/

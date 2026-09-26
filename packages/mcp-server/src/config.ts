@@ -3,7 +3,9 @@ import path from "node:path";
 
 export interface Config {
   region: string;
-  imageArn: string;
+  /** Explicit image ARN. When absent it is derived from region + account + imageName. */
+  imageArn: string | undefined;
+  imageName: string;
   /** Explicit image version such as "1.0". When absent the latest ACTIVE version is used. */
   imageVersion: string | undefined;
   maxDurationS: number;
@@ -21,6 +23,7 @@ export interface Config {
 }
 
 export const DEFAULTS = {
+  imageName: "sandbox-agent",
   maxDurationS: 4 * 3600,
   idleS: 600,
   suspendedS: 3600,
@@ -32,12 +35,18 @@ export const DEFAULTS = {
   resumeWaitS: 90,
 } as const;
 
-export const USAGE = `lambda-microvm-sandbox-mcp [options]
+export const USAGE = `lambda-microvm-sandbox-mcp [command] [options]
 
-Options (each also settable via the environment variable in parentheses):
-  --image-arn <arn>          MicroVM image ARN (SANDBOX_IMAGE_ARN)          [required]
-  --image-version <ver>      Image version, e.g. 1.0 (SANDBOX_IMAGE_VERSION) [default: latest ACTIVE]
-  --region <region>          Override the region taken from the image ARN
+Commands:
+  (none)                     Run the MCP server on stdio (what your agent's MCP config should launch)
+  setup                      One-time: create the S3 bucket, build role and MicroVM image in your account
+  doctor                     Check credentials, region support, image state and configuration
+
+Server options (each also settable via the environment variable in parentheses):
+  --image-name <name>        MicroVM image name (SANDBOX_IMAGE_NAME)          [default: ${DEFAULTS.imageName}]
+  --image-arn <arn>          Full image ARN instead of name lookup (SANDBOX_IMAGE_ARN)
+  --image-version <ver>      Image version, e.g. 1.0 (SANDBOX_IMAGE_VERSION)  [default: latest ACTIVE]
+  --region <region>          AWS region (AWS_REGION / profile default / image ARN)
   --max-duration <sec>       maximumDurationInSeconds (SANDBOX_MAX_DURATION_S) [default: ${DEFAULTS.maxDurationS}]
   --idle <sec>               idlePolicy.maxIdleDurationSeconds (SANDBOX_IDLE_S) [default: ${DEFAULTS.idleS}]
   --suspended <sec>          idlePolicy.suspendedDurationSeconds (SANDBOX_SUSPENDED_S) [default: ${DEFAULTS.suspendedS}]
@@ -47,6 +56,16 @@ Options (each also settable via the environment variable in parentheses):
   --token-ttl <min>          Auth token lifetime 1-60 (SANDBOX_TOKEN_TTL_MIN) [default: ${DEFAULTS.tokenTtlMin}]
   --print-config             Print the resolved configuration and exit
   -h, --help                 Show this help
+
+Setup options:
+  --region <region>          Region to build in (required unless AWS_REGION or a profile default is set)
+  --image-name <name>        Image name                                     [default: ${DEFAULTS.imageName}]
+  --bucket <name>            Existing bucket for the artifact                [default: lambda-microvm-sandbox-<account>-<region>]
+  --build-role-arn <arn>     Existing build role instead of creating one
+  --build-role-name <name>   Name of the role to create                      [default: LambdaMicrovmSandboxBuildRole]
+  --memory-mib <n>           VM size; one image has one size                 [default: 2048]
+  --dry-run                  Show what would be created and exit
+  --yes                      Do not ask for confirmation
 `;
 
 function regionFromArn(arn: string): string | undefined {
@@ -76,6 +95,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (a === "-h" || a === "--help") help = true;
     else if (a === "--print-config") printConfig = true;
     else if (a === "--no-internet-egress") values["internet-egress"] = false;
+    else if (a === "--dry-run" || a === "--yes") values[a.slice(2)] = true;
     else if (a.startsWith("--")) {
       const eq = a.indexOf("=");
       const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
@@ -87,7 +107,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return { values, help, printConfig };
 }
 
-export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process.env): Config {
+export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process.env, defaultRegion?: string): Config {
   const { values } = parseArgs(argv);
   const str = (k: string, e: string): string | undefined => {
     const v = values[k];
@@ -96,12 +116,12 @@ export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process
     return ev === "" ? undefined : ev;
   };
   const imageArn = str("image-arn", "SANDBOX_IMAGE_ARN");
-  if (!imageArn) throw new Error("SANDBOX_IMAGE_ARN (or --image-arn) is required");
-  // The image ARN decides the region: MicroVMs must be run where the image lives.
-  // --region only overrides it explicitly; AWS_REGION is a fallback for odd ARNs.
+  // Region precedence: --region, then the image ARN (a VM must run where its
+  // image lives), then the environment, then whatever the caller resolved from
+  // the AWS profile (passed in as defaultRegion).
   const explicitRegion = typeof values["region"] === "string" ? (values["region"] as string) : undefined;
-  const region = explicitRegion ?? regionFromArn(imageArn) ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION;
-  if (!region) throw new Error("could not determine region; set --region");
+  const region = explicitRegion ?? (imageArn ? regionFromArn(imageArn) : undefined) ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? defaultRegion;
+  if (!region) throw new Error("could not determine the AWS region; pass --region or set AWS_REGION");
   const egressFlag = values["internet-egress"];
   const internetEgress =
     typeof egressFlag === "boolean" ? egressFlag : env.SANDBOX_INTERNET_EGRESS === undefined ? DEFAULTS.internetEgress : env.SANDBOX_INTERNET_EGRESS !== "false";
@@ -112,6 +132,7 @@ export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process
   return {
     region,
     imageArn,
+    imageName: str("image-name", "SANDBOX_IMAGE_NAME") ?? DEFAULTS.imageName,
     imageVersion: str("image-version", "SANDBOX_IMAGE_VERSION"),
     maxDurationS,
     idleS: num(str("idle", "SANDBOX_IDLE_S"), DEFAULTS.idleS, "idle"),
@@ -129,4 +150,14 @@ export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process
 
 export function connectorArn(region: string, name: "ALL_INGRESS" | "NO_INGRESS" | "INTERNET_EGRESS" | "SHELL_INGRESS"): string {
   return `arn:aws:lambda:${region}:aws:network-connector:aws-network-connector:${name}`;
+}
+
+/** Build the image ARN the server will use, given the caller's account. */
+export function imageArnFor(config: Config, account: string): string {
+  return config.imageArn ?? `arn:aws:lambda:${config.region}:${account}:microvm-image:${config.imageName}`;
+}
+
+export function setupHint(config: Config): string {
+  const name = config.imageName === DEFAULTS.imageName ? "" : ` --image-name ${config.imageName}`;
+  return `run \`npx lambda-microvm-sandbox-mcp setup --region ${config.region}${name}\` once to build it`;
 }
