@@ -28,6 +28,12 @@ const service = new SandboxService({
   registry: new Registry(null),
 });
 const timings: Record<string, number> = {};
+/** The smoke test only runs foreground commands; narrow the exec result type. */
+const exec = async (sandboxId: string, req: Parameters<typeof service.exec>[1]) => {
+  const r = await service.exec(sandboxId, req);
+  if ("background" in r) throw new Error("unexpected background result");
+  return r;
+};
 const t = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
   const s = Date.now();
   try {
@@ -45,19 +51,19 @@ try {
   console.log(`sandbox ${id} at ${created.endpoint}`);
 
   const who = await t("exec whoami", () =>
-    service.exec(id as string, { command: "whoami; id; pwd; node --version; python3 --version; git --version" }),
+    exec(id as string, { command: "whoami; id; pwd; node --version; python3 --version; git --version" }),
   );
   console.log(who.stdout.trim());
   if (who.exit_code !== 0) throw new Error(`toolchain check failed: ${who.stderr}`);
 
   const root = await t("exec sudo (shim over root relay)", () =>
-    service.exec(id as string, { command: "sudo -n whoami && echo hi | sudo tee /root/from-sudo >/dev/null && sudo cat /root/from-sudo" }),
+    exec(id as string, { command: "sudo -n whoami && echo hi | sudo tee /root/from-sudo >/dev/null && sudo cat /root/from-sudo" }),
   );
   if (root.stdout.trim() !== "root\nhi") throw new Error(`sudo failed (${root.exit_code}): ${root.stdout} ${root.stderr}`);
-  const asRoot = await t("exec as_root", () => service.exec(id as string, { command: "whoami", as_root: true }));
+  const asRoot = await t("exec as_root", () => exec(id as string, { command: "whoami", as_root: true }));
   if (asRoot.stdout.trim() !== "root") throw new Error(`as_root failed: ${asRoot.stderr}`);
   const pkg = await t("exec sudo dnf install (bc)", () =>
-    service.exec(id as string, {
+    exec(id as string, {
       // dnf in the al2023-minimal image is microdnf: no -q flag.
       command: "sudo dnf install -y bc >/dev/null && echo '2+3' | bc",
       timeout_s: 300,
@@ -68,12 +74,12 @@ try {
   await t("write file", () => service.writeFile(id as string, { path: "hello.txt", content: "hello from smoke test\n" }));
   const read = await t("read file", () => service.readFile(id as string, { path: "hello.txt" }));
   if (read.content !== "hello from smoke test\n") throw new Error("file roundtrip mismatch");
-  const owner = await service.exec(id as string, { command: "stat -c %U hello.txt" });
+  const owner = await exec(id as string, { command: "stat -c %U hello.txt" });
   console.log(`  file owner: ${owner.stdout.trim()}`);
 
   await t("suspend", () => service.suspend(id as string));
   await new Promise((r) => setTimeout(r, 3000));
-  const afterResume = await t("exec after suspend (auto-resume)", () => service.exec(id as string, { command: "cat hello.txt" }));
+  const afterResume = await t("exec after suspend (auto-resume)", () => exec(id as string, { command: "cat hello.txt" }));
   if (afterResume.stdout !== "hello from smoke test\n") throw new Error("state lost across suspend");
 
   const status = await t("status", () => service.status(id as string));

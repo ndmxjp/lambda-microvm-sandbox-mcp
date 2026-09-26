@@ -11,7 +11,7 @@
   "scripts": {
     "build": "npm run build -w packages/sandbox-agent && npm run build -w packages/mcp-server",
     "typecheck": "tsc -p packages/sandbox-agent && tsc -p packages/mcp-server --noEmit && tsc -p scripts --noEmit",
-    "test": "npm run build && vitest run",
+    "test": "npm run build && npm run typecheck && vitest run",
     "test:watch": "vitest",
     "build-image": "node packages/mcp-server/dist/index.js setup",
     "smoke-test": "tsx scripts/smoke-test.ts",
