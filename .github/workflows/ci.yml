@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: packages/sandbox-agent/image/Dockerfile
           # DL3041: pinning dnf package versions is impractical for a rolling AL2023 base.
