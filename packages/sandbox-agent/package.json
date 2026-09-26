@@ -1,0 +1,23 @@
+{
+  "name": "@lambda-microvm-sandbox/agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTTP agent that runs inside a Lambda MicroVM and exposes exec/file APIs plus lifecycle hooks",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p . && node image/build.mjs",
+    "typecheck": "tsc -p . --noEmit"
+  }
+}

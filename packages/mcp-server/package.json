@@ -1,0 +1,33 @@
+{
+  "name": "lambda-microvm-sandbox-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that gives AI coding agents isolated sandboxes on AWS Lambda MicroVMs",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "lambda-microvm-sandbox-mcp": "./dist/index.js"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p . && chmod +x dist/index.js",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda-microvms": "^3.1141.0",
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@lambda-microvm-sandbox/agent": "*"
+  }
+}

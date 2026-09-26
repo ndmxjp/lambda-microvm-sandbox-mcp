@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "lambda-sandbox": {
+      "command": "node",
+      "args": [
+        "packages/mcp-server/dist/index.js",
+        "--image-arn",
+        "arn:aws:lambda:ap-northeast-1:123456789012:microvm-image:sandbox-agent",
+        "--max-duration",
+        "1800"
+      ]
+    }
+  }
+}
