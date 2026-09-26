@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type {
@@ -160,10 +160,9 @@ describe("files", () => {
     await t.call("POST", "/files/write", { path: "bin.dat", content: bytes.toString("base64"), encoding: "base64", mode: "600" });
     const r = await t.call<ReadFileResponse>("POST", "/files/read", { path: "bin.dat", encoding: "base64" });
     expect(Buffer.from(r.json.content, "base64")).toEqual(bytes);
-    const st = readFileSync(path.join(t.workspace, "bin.dat"));
-    expect(st.length).toBe(6);
-    const r2 = await t.call<ExecResponse>("POST", "/exec", { command: "stat -f %Lp bin.dat 2>/dev/null || stat -c %a bin.dat" });
-    expect(r2.json.stdout.trim()).toBe("600");
+    const st = statSync(path.join(t.workspace, "bin.dat"));
+    expect(st.size).toBe(6);
+    expect(st.mode & 0o777).toBe(0o600);
   });
 
   it("truncates reads with max_bytes", async () => {
