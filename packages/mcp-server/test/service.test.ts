@@ -201,7 +201,7 @@ describe("SandboxService end to end against an in-process agent", () => {
   let id: string;
 
   it("creates a sandbox, waits for the run hook, and stores the record", async () => {
-    const created = await service.create({ name: "e2e", max_duration_s: 1800 });
+    const created = await service.create({ name: "e2e", max_duration_s: 1800, idle_s: 1200 });
     id = created.sandbox_id;
     expect(id).toMatch(/^microvm-/);
     expect(created.state).toBe("RUNNING");
@@ -209,6 +209,7 @@ describe("SandboxService end to end against an in-process agent", () => {
     const run = api.runCalls[0];
     expect(run?.maximumDurationInSeconds).toBe(1800);
     expect(run?.idlePolicy.autoResumeEnabled).toBe(true);
+    expect(run?.idlePolicy.maxIdleDurationSeconds).toBe(1200);
     expect(run?.ingressNetworkConnectors[0]).toContain("ALL_INGRESS");
     expect(run?.egressNetworkConnectors[0]).toContain("INTERNET_EGRESS");
     expect(JSON.parse(run?.runHookPayload ?? "{}").secret.length).toBeGreaterThanOrEqual(32);

@@ -287,3 +287,12 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - 追加機能: `sandbox_exec` の `background: true`（切り離し起動、pid とログを返す）、`sandbox_port_forward` / `sandbox_port_forward_stop`（MCP サーバー内のローカルリバースプロキシ。`X-aws-proxy-auth` と `X-aws-proxy-port` を注入し、WebSocket は lambda-* サブプロトコルで認証して透過。トークンは対象ポートを含めて再発行）。テスト 65 件、イメージ 4.0
 - Herdr の Claude Code（ローカルビルドの MCP）に依頼した結果: create 4 秒 → `git clone` 5 秒 → `yarn install` 41 秒 → `yarn build:app` 37 秒（4 vCPU / 8GB のバースト内で余裕あり）→ `python3 -m http.server 3000` を background 起動 → `sandbox_port_forward 3000 → 3838`。Chrome で `http://127.0.0.1:3838` を開き Excalidraw が描画できることを確認。ローカルからの往復は index 45 ms、JS アセット 340 ms
 - 発見: AL2023 の `nodejs22-npm` は `npm-22` / `npx-22` しか置かず `npm` へのリンクがない。corepack も同梱されない。エージェントは自力でリンクを張って回避したが、Dockerfile に `npm` / `npx` のリンクと `corepack enable`（yarn / pnpm シム）を追加した（CI の Docker 起動テストで検証、次のイメージビルドで反映）
+
+## 18. 「Resume lifecycle hook connection was refused」の調査（2026-09-27 JST）
+
+- 事象: Excalidraw デモの VM（イメージ 4.0）が、10 分アイドルで suspend された約 2 分後に `Resume lifecycle hook connection was refused` で Lambda により TERMINATED（16:35 UTC）。resume のきっかけは Chrome からフォワード経由のアクセスと推測。当時は実行ロールがなく VM のログは残っていない
+- 対策 1: 実行ロール（CloudWatch Logs 書き込み専用）を任意で付けられるようにし、`sandbox_vm_logs` で VM 自体のログを読めるようにした。ログストリーム名は `YYYY/MM/DD[<版>]<microvmId>`
+- 再現試行 1（http.server のみ、idle 120 秒、suspend 2.5 分 → exec で resume）: 再現せず。resume 1.5 秒、ログに run → suspend → resume → terminate が順に記録
+- 再現試行 2（Excalidraw の clone / install / build → 配信 → ポートフォワード → idle 120 秒 → suspend 2.3 分 → フォワード経由の HTTP で resume）: 再現せず。resume 2.0 秒、agent は PID 1 で生存（RSS 59MB）、フックの記録も正常
+- 結論: 2 回の再現で問題なし。原因は特定できていない（プラットフォーム側の一時的な事象か、当時の環境固有の要因）。次に発生した場合は `--execution-role-arn` を付けて VM ログを取得する。ブラウザで開き続ける用途には `sandbox_create` の `idle_s` を長めに指定して suspend/resume の回数を減らすことを推奨
+- ビルドロールのログ権限パスの誤り（`/aws/lambda/microvms/*`）を修正。3.0〜5.0 のビルドログが出ていなかった原因

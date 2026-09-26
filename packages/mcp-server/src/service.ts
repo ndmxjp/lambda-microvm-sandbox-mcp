@@ -24,6 +24,8 @@ export interface CreateOptions {
   name?: string;
   max_duration_s?: number;
   internet_egress?: boolean;
+  /** Seconds without traffic before the VM auto-suspends (default from config). */
+  idle_s?: number;
 }
 
 export interface SandboxSummary {
@@ -234,7 +236,7 @@ export class SandboxService {
       ...(cfg.executionRoleArn ? { executionRoleArn: cfg.executionRoleArn } : {}),
       runHookPayload: JSON.stringify(payload),
       maximumDurationInSeconds: maxDuration,
-      idlePolicy: { maxIdleDurationSeconds: cfg.idleS, suspendedDurationSeconds: cfg.suspendedS, autoResumeEnabled: true },
+      idlePolicy: { maxIdleDurationSeconds: opts.idle_s ?? cfg.idleS, suspendedDurationSeconds: cfg.suspendedS, autoResumeEnabled: true },
       ingressNetworkConnectors: [connectorArn(cfg.region, "ALL_INGRESS")],
       egressNetworkConnectors: egress ? [connectorArn(cfg.region, "INTERNET_EGRESS")] : [],
       clientToken: randomUUID(),

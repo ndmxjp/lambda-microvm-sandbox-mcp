@@ -7,6 +7,10 @@
   `--execution-role-arn` and read the VM's own log stream with the new
   `sandbox_vm_logs` tool.
 - `setup --skip-image` refreshes the bucket and roles without rebuilding.
+- `sandbox_create` accepts `idle_s` to lengthen the auto-suspend window for
+  apps a user keeps open in a browser.
+- Reproduction scripts `scripts/repro-idle-resume.ts` and
+  `scripts/repro-excalidraw.ts` for the suspend/resume path (billable).
 - Fix: the build role could not write build logs (wrong log group path
   `/aws/lambda/microvms/*`; Lambda uses `/aws/lambda-microvms/<image>`).
   `setup` now also refreshes the policy of roles it created earlier.
