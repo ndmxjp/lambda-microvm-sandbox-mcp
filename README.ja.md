@@ -92,6 +92,7 @@ Kiro（`.kiro/settings/mcp.json`）:
 | `sandbox_port_forward` / `sandbox_port_forward_stop` | サンドボックス内のポートを手元の `http://127.0.0.1:<port>` に公開（HTTP と WebSocket）。サンドボックスで動かした開発サーバーや Web アプリをブラウザで開ける。アプリは `sandbox_exec` の `background=true` で起動する |
 | `sandbox_suspend` / `sandbox_resume` | 状態を保ったままコンピュート課金を止める。suspend 中の VM は次の呼び出しで自動復帰 |
 | `sandbox_status` / `sandbox_list` | 状態と理由。Lambda 側で終了済みの VM は一度だけ報告される |
+| `sandbox_vm_logs` | VM 自体の CloudWatch ログを読む（任意。`--execution-role-arn` が必要） |
 | `sandbox_destroy` | VM を終了する |
 
 サーバーのすべてのオプションにはフラグと環境変数があります。`npx lambda-microvm-sandbox-mcp --help` を参照してください。詳細は [`packages/mcp-server/README.md`](packages/mcp-server/README.md) にあります。
@@ -111,7 +112,7 @@ Kiro（`.kiro/settings/mcp.json`）:
 
 ## セキュリティモデル
 
-- VM に **IAM 実行ロールはありません**。AWS 認証情報はあなたのマシンから出ず、サンドボックスが到達できるのはインターネットだけです（`--no-internet-egress` で遮断も可能）。
+- VM に **IAM 実行ロールは既定でありません**。AWS 認証情報はあなたのマシンから出ず、サンドボックスが到達できるのはインターネットだけです（`--no-internet-egress` で遮断も可能）。VM 自体のログが欲しいときだけ、CloudWatch Logs 書き込み専用のロールを `setup --execution-role` で作り `--execution-role-arn` で渡します。
 - VM へのリクエストには、VM とポートを限定した Lambda 発行トークンと、作成時に生成して `/run` ライフサイクルフックで届ける VM ごとのシークレットが必要です。どちらもイメージには書き込まれません。
 - コマンドはユーザー `sandbox` で実行されます。`sudo` は使えますが、コンテナが `no_new_privileges` で動くため、root の agent へグループ限定の unix ソケット経由で中継するシムです。`sandbox_exec` の `as_root: true` も同じ動きです。
 - 既知のサンドボックスは `~/.lambda-sandbox/sandboxes.json`（0600）に保存されます。

@@ -116,6 +116,7 @@ read what it needs, and finish with `sandbox_destroy`.
 | `sandbox_port_forward` / `sandbox_port_forward_stop` | Expose a port inside the sandbox as `http://127.0.0.1:<port>` on your machine (HTTP and WebSocket), so a dev server or web app running in the sandbox opens in your browser. Start the app with `sandbox_exec` `background=true`. |
 | `sandbox_suspend` / `sandbox_resume` | Pause compute billing while keeping state; suspended VMs auto-resume on the next call. |
 | `sandbox_status` / `sandbox_list` | State and reason; VMs that Lambda already terminated are reported once. |
+| `sandbox_vm_logs` | Tail the VM's CloudWatch logs (optional, needs `--execution-role-arn`). |
 | `sandbox_destroy` | Terminate the VM. |
 
 Every option of the server has a flag and an environment variable; run
@@ -138,9 +139,11 @@ longer needs. `sandbox_list` shows anything still running.
 
 ## Security model
 
-- The VM has **no IAM execution role**. Your AWS credentials stay on your
-  machine; the sandbox can only reach the public internet (or nothing, with
-  `--no-internet-egress`).
+- The VM has **no IAM execution role** by default. Your AWS credentials stay on
+  your machine; the sandbox can only reach the public internet (or nothing, with
+  `--no-internet-egress`). Opt in to a CloudWatch-Logs-only role
+  (`setup --execution-role`, then `--execution-role-arn`) when you want the VM's
+  own logs.
 - Every request to a VM carries a Lambda-issued token that is valid for one VM
   and one port, plus a per-VM secret generated at creation and delivered
   through the `/run` lifecycle hook. Neither is ever written into the image.

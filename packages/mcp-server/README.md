@@ -85,6 +85,7 @@ all have environment-variable twins (`SANDBOX_IMAGE_NAME`, `SANDBOX_IMAGE_ARN`,
 | `sandbox_port_forward` / `sandbox_port_forward_stop` | Expose a port inside the sandbox as `http://127.0.0.1:<port>` locally (HTTP + WebSocket). Start the app with `sandbox_exec` `background=true` listening on 0.0.0.0. |
 | `sandbox_suspend` / `sandbox_resume` | Pause compute billing while keeping state. Suspended VMs auto-resume on the next call. |
 | `sandbox_status` / `sandbox_list` | State and `stateReason`; terminated VMs are reported once and forgotten. |
+| `sandbox_vm_logs` | Tail the VM's CloudWatch log stream (agent messages, lifecycle hooks, crashes). Needs `--execution-role-arn`. |
 | `sandbox_destroy` | Terminate the VM. |
 
 ## Behaviour worth knowing
@@ -106,5 +107,10 @@ all have environment-variable twins (`SANDBOX_IMAGE_NAME`, `SANDBOX_IMAGE_ARN`,
 - The image is based on `al2023-minimal`, so `dnf` is really `microdnf`
   (`sudo dnf install -y <pkg>` works, `-q` and some other flags do not) and the
   default `python3` is 3.9.
-- The VM has **no** IAM execution role. Anything that needs AWS access must go
-  through your agent, not the sandbox.
+- By default the VM has **no** IAM execution role, so anything that needs AWS
+  access must go through your agent, not the sandbox. Without a role Lambda also
+  does not forward the VM's stdout/stderr anywhere; if you need those logs (for
+  example to debug a sandbox that Lambda terminated), run
+  `setup --execution-role` once and start the server with
+  `--execution-role-arn <arn>`. That role can only write to CloudWatch Logs, and
+  `sandbox_vm_logs` then reads the stream.

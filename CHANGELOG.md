@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 (unreleased)
+
+- Optional CloudWatch runtime logs: `setup --execution-role` creates a role that
+  can only write to CloudWatch Logs; start the server with
+  `--execution-role-arn` and read the VM's own log stream with the new
+  `sandbox_vm_logs` tool.
+- `setup --skip-image` refreshes the bucket and roles without rebuilding.
+- Fix: the build role could not write build logs (wrong log group path
+  `/aws/lambda/microvms/*`; Lambda uses `/aws/lambda-microvms/<image>`).
+  `setup` now also refreshes the policy of roles it created earlier.
+
 ## 0.2.0 (2026-09-27)
 
 - `sandbox_exec` gains `background: true`: start servers and other long-running
