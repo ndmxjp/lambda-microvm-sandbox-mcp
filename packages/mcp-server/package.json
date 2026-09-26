@@ -2,7 +2,29 @@
   "name": "lambda-microvm-sandbox-mcp",
   "version": "0.1.0",
   "description": "MCP server that gives AI coding agents isolated sandboxes on AWS Lambda MicroVMs",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "aws",
+    "lambda",
+    "microvm",
+    "firecracker",
+    "sandbox",
+    "ai-agent",
+    "claude-code",
+    "kiro"
+  ],
   "license": "MIT",
+  "author": "Takumi Saito",
+  "homepage": "https://github.com/ndmxjp/lambda-microvm-sandbox-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ndmxjp/lambda-microvm-sandbox-mcp.git",
+    "directory": "packages/mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/ndmxjp/lambda-microvm-sandbox-mcp/issues"
+  },
   "type": "module",
   "bin": {
     "lambda-microvm-sandbox-mcp": "./dist/index.js"
@@ -13,10 +35,14 @@
     "dist",
     "image",
     "cloudformation",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p . && node scripts/copy-image.mjs && chmod +x dist/index.js",
