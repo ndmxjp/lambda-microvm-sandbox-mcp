@@ -1,6 +1,6 @@
 {
   "name": "lambda-microvm-sandbox-mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "MCP server that gives AI coding agents isolated sandboxes on AWS Lambda MicroVMs",
   "keywords": [
     "mcp",

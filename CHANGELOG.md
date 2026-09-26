@@ -1,13 +1,14 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-09-27)
 
 - `sandbox_exec` gains `background: true`: start servers and other long-running
   processes detached, returning the pid and a log path instead of waiting.
 - New `sandbox_port_forward` / `sandbox_port_forward_stop`: a local reverse proxy
   that injects the Lambda auth headers so a web app inside the sandbox opens at
   `http://127.0.0.1:<port>` in your browser (HTTP and WebSocket).
-- Sandbox image 4.0 (agent with background execution) — run `setup` again.
+- Image: `npm`, `npx` and `corepack` (yarn / pnpm shims) are on PATH; AL2023's
+  `nodejs22-npm` only ships `npm-22`. Run `setup` again to rebuild the image.
 
 ## 0.1.1 (2026-09-26)
 

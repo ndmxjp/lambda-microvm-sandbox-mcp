@@ -9,7 +9,7 @@ import { AgentState, type AgentOptions } from "./state.js";
 import { isRoot, lookupUser } from "./users.js";
 import { DEFAULT_API_PORT, DEFAULT_HOOK_PORT } from "./protocol.js";
 
-export const AGENT_VERSION = "0.1.0";
+export const AGENT_VERSION = "0.2.0";
 
 export interface RunningAgent {
   apiPort: number;

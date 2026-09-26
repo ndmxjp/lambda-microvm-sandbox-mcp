@@ -5,7 +5,7 @@ import type { SandboxService } from "./service.js";
 import { SandboxError } from "./client.js";
 
 export const SERVER_NAME = "lambda-microvm-sandbox";
-export const SERVER_VERSION = "0.1.1";
+export const SERVER_VERSION = "0.2.0";
 
 function ok(result: unknown): CallToolResult {
   return {
