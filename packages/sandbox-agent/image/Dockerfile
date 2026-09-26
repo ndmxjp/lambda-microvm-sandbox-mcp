@@ -7,8 +7,13 @@ FROM public.ecr.aws/lambda/microvms:al2023-minimal
 # added at runtime with `sudo dnf install`.
 ARG SANDBOX_PACKAGES="nodejs22 nodejs22-npm python3 python3-pip git tar gzip unzip jq curl-minimal make gcc gcc-c++ shadow-utils procps-ng which findutils diffutils"
 RUN dnf install -y ${SANDBOX_PACKAGES} \
- && alternatives --install /usr/bin/node node /usr/bin/node-22 100 || true \
  && dnf clean all && rm -rf /var/cache/dnf /var/log/dnf*
+
+# AL2023's nodejs22-npm installs npm-22/npx-22 without `npm`/`npx` links, and
+# ships no corepack. Give agents the usual commands plus yarn/pnpm shims.
+RUN ln -sf /usr/bin/npm-22 /usr/local/bin/npm && ln -sf /usr/bin/npx-22 /usr/local/bin/npx \
+ && npm install -g corepack@latest && corepack enable --install-directory /usr/local/bin \
+ && node --version && npm --version && corepack --version
 
 # Commands run as this user, like a CI runner. The agent process itself stays
 # root so a stray `pkill` cannot take down the control plane. The container has

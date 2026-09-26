@@ -281,3 +281,9 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - 検証: 別ディレクトリで `npx -y lambda-microvm-sandbox-mcp@0.1.0 --help` / `doctor` が動作。Herdr の別ペインで `claude-pub --mcp-config`（npx 起動の設定）から create → exec（sandbox ユーザー、sudo → root）→ write/read → status → destroy → list が全成功、VM は残っていない
 - 気づき: 検証エージェントが `sandbox_delete` を「destroy の別名」と誤解した。次版でツール名を `sandbox_delete_path` などに変えて混同を避ける
 - 未実施: GitHub Release と `v0.1.0` タグ（`release.yml` が publish を再試行して失敗するため、`NPM_TOKEN` か Trusted Publishing を設定してから）
+
+## 17. 実運用テスト: Excalidraw をサンドボックスで配信（2026-09-27 JST）
+
+- 追加機能: `sandbox_exec` の `background: true`（切り離し起動、pid とログを返す）、`sandbox_port_forward` / `sandbox_port_forward_stop`（MCP サーバー内のローカルリバースプロキシ。`X-aws-proxy-auth` と `X-aws-proxy-port` を注入し、WebSocket は lambda-* サブプロトコルで認証して透過。トークンは対象ポートを含めて再発行）。テスト 65 件、イメージ 4.0
+- Herdr の Claude Code（ローカルビルドの MCP）に依頼した結果: create 4 秒 → `git clone` 5 秒 → `yarn install` 41 秒 → `yarn build:app` 37 秒（4 vCPU / 8GB のバースト内で余裕あり）→ `python3 -m http.server 3000` を background 起動 → `sandbox_port_forward 3000 → 3838`。Chrome で `http://127.0.0.1:3838` を開き Excalidraw が描画できることを確認。ローカルからの往復は index 45 ms、JS アセット 340 ms
+- 発見: AL2023 の `nodejs22-npm` は `npm-22` / `npx-22` しか置かず `npm` へのリンクがない。corepack も同梱されない。エージェントは自力でリンクを張って回避したが、Dockerfile に `npm` / `npx` のリンクと `corepack enable`（yarn / pnpm シム）を追加した（CI の Docker 起動テストで検証、次のイメージビルドで反映）

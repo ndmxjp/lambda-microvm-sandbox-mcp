@@ -32,7 +32,7 @@ curl -sf "$api/health" | grep -q '"ready":true'
 exec_json() { curl -sf -X POST "$api/exec" -H "x-sandbox-secret: $SECRET" -H 'content-type: application/json' -d "$1"; }
 
 echo "exec as sandbox user"
-out=$(exec_json '{"command":"whoami; pwd; node --version; python3 --version; git --version; gcc --version | head -1"}')
+out=$(exec_json '{"command":"whoami; pwd; node --version; npm --version; corepack --version; python3 --version; git --version; gcc --version | head -1"}')
 echo "$out"
 echo "$out" | grep -q '"exit_code":0'
 echo "$out" | grep -q 'sandbox\\n/workspace\\nv22'
