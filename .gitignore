@@ -6,3 +6,4 @@ dist/
 build/
 .env
 packages/mcp-server/image/
+.playwright-mcp/
