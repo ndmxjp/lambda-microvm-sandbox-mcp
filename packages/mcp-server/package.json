@@ -27,7 +27,7 @@
   },
   "type": "module",
   "bin": {
-    "lambda-microvm-sandbox-mcp": "./dist/index.js"
+    "lambda-microvm-sandbox-mcp": "dist/index.js"
   },
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
