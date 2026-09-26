@@ -35,22 +35,62 @@ export function createApiServer(state: AgentState): Server {
     sendJson(res, 200, body);
   });
 
-  route("POST", "/exec", json((b: P.ExecRequest) => runCommand(state, b)));
-  route("POST", "/files/read", json((b: P.ReadFileRequest) => files.readFile(state, b)));
-  route("POST", "/files/write", json((b: P.WriteFileRequest) => files.writeFile(state, b)));
-  route("POST", "/files/list", json((b: P.ListFilesRequest) => files.listFiles(state, b)));
-  route("POST", "/files/delete", json((b: P.DeleteRequest) => files.deletePath(state, b)));
-  route("POST", "/files/pull", json((b: P.PullRequest) => files.pull(state, b)));
-  route("POST", "/files/push", json((b: P.PushRequest) => files.push(state, b)));
+  route(
+    "POST",
+    "/exec",
+    json((b: P.ExecRequest) => runCommand(state, b)),
+  );
+  route(
+    "POST",
+    "/files/read",
+    json((b: P.ReadFileRequest) => files.readFile(state, b)),
+  );
+  route(
+    "POST",
+    "/files/write",
+    json((b: P.WriteFileRequest) => files.writeFile(state, b)),
+  );
+  route(
+    "POST",
+    "/files/list",
+    json((b: P.ListFilesRequest) => files.listFiles(state, b)),
+  );
+  route(
+    "POST",
+    "/files/delete",
+    json((b: P.DeleteRequest) => files.deletePath(state, b)),
+  );
+  route(
+    "POST",
+    "/files/pull",
+    json((b: P.PullRequest) => files.pull(state, b)),
+  );
+  route(
+    "POST",
+    "/files/push",
+    json((b: P.PushRequest) => files.push(state, b)),
+  );
 
-  route("POST", "/archive/upload/start", json((b: P.UploadStartRequest) => files.uploadStart(state, b)));
+  route(
+    "POST",
+    "/archive/upload/start",
+    json((b: P.UploadStartRequest) => files.uploadStart(state, b)),
+  );
   route("PUT", "/archive/upload/chunk", async (req, res, url) => {
     const body = await readBody(req, LIMITS.chunkBytes);
     const out = await files.uploadChunk(url.searchParams.get("transfer_id"), url.searchParams.get("offset"), body);
     sendJson(res, 200, out);
   });
-  route("POST", "/archive/upload/finish", json((b: P.UploadFinishRequest) => files.uploadFinish(state, b)));
-  route("POST", "/archive/download/start", json((b: P.DownloadStartRequest) => files.downloadStart(state, b)));
+  route(
+    "POST",
+    "/archive/upload/finish",
+    json((b: P.UploadFinishRequest) => files.uploadFinish(state, b)),
+  );
+  route(
+    "POST",
+    "/archive/download/start",
+    json((b: P.DownloadStartRequest) => files.downloadStart(state, b)),
+  );
   route("GET", "/archive/download/chunk", async (_req, res, url) => {
     const { stream, length } = files.downloadChunk(
       url.searchParams.get("transfer_id"),
@@ -60,7 +100,11 @@ export function createApiServer(state: AgentState): Server {
     res.writeHead(200, { "content-type": "application/octet-stream", "content-length": length });
     await pipeline(stream, res);
   });
-  route("POST", "/archive/download/finish", json((b: P.DownloadFinishRequest) => files.downloadFinish(b)));
+  route(
+    "POST",
+    "/archive/download/finish",
+    json((b: P.DownloadFinishRequest) => files.downloadFinish(b)),
+  );
 
   const server = createServer((req, res) => {
     void (async () => {

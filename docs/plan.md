@@ -267,3 +267,9 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - 2 回目の `setup --dry-run` は既存バケットとロールを再利用する表示になり、冪等性を確認。`doctor` は 3.0 を latest ACTIVE と表示
 - 3.0 での smoke test: create 2.5 秒、exec 99 ms、sudo シム 429 ms、`sudo dnf install -y bc` 21 秒で `echo 2+3 | bc` → 5、suspend 後の exec 594 ms、destroy 済み
 - 旧リソースの削除（2026-09-26）: イメージ 2.0、getting-started 由来の `MicrovmBuildRole`（インラインポリシー含む）と `lambda-microvm-test-123456789012-apne1`（オブジェクト 3 件含む）を削除。残るのは `sandbox-agent` 3.0、新しいバケットとロール、getting-started の `my-first-microvm-image` 1.0（未確認のため残置）
+
+## 15. CI（2026-09-26）
+
+- GitHub Actions: `ci.yml`（typecheck / eslint / prettier / vitest を ubuntu Node 20・22 と macOS Node 22 で実行、`npm pack` → `npx` 起動で stdio の `tools/list` を確認、hadolint、linux/arm64 の Docker ビルドと起動テスト）、`release.yml`（`v*` タグで npm publish、`NPM_TOKEN` が必要）、`e2e.yml`（手動のみ、OIDC ロール `AWS_ROLE_ARN` で setup + smoke test）、Dependabot
+- Docker 起動テスト `packages/sandbox-agent/image/ci-boot-test.sh` は Lambda と MCP サーバーの代わりにフックと API を叩く。dnf パッケージ名や sudo シムの回帰を AWS なしで検出できる。QEMU なので遅く、push 時と `image` ラベル付き PR のみ
+- ローカルで actionlint / hadolint / shellcheck / eslint / prettier をすべて通過。GitHub 上での実行はまだ（push が必要）

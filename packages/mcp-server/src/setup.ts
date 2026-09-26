@@ -194,7 +194,9 @@ export async function runSetup(opts: SetupOptions, clients: SetupClients, io: Se
 
   io.log(`account ${account}, region ${opts.region}`);
   io.log(`S3 bucket      ${bucket} ${bucketExists ? "(exists)" : "(will create: private, SSE-S3, 30-day expiry)"}`);
-  io.log(`build role     ${existingRole ?? `${opts.buildRoleName} (will create: trusts lambda.amazonaws.com, reads the bucket, writes build logs)`}`);
+  io.log(
+    `build role     ${existingRole ?? `${opts.buildRoleName} (will create: trusts lambda.amazonaws.com, reads the bucket, writes build logs)`}`,
+  );
   io.log(`image          ${imageArn} ${imageExists ? "(exists: will build a new version)" : "(will create version 1.0)"}`);
   io.log(`artifact       s3://${bucket}/${key} (${assets.entries.map((e) => e.name).join(", ")})`);
   io.log(`size           ${opts.memoryMib} MiB memory, ARM64, INTERNET_EGRESS during build`);

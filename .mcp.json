@@ -2,13 +2,7 @@
   "mcpServers": {
     "lambda-sandbox": {
       "command": "node",
-      "args": [
-        "packages/mcp-server/dist/index.js",
-        "--region",
-        "ap-northeast-1",
-        "--max-duration",
-        "1800"
-      ]
+      "args": ["packages/mcp-server/dist/index.js", "--region", "ap-northeast-1", "--max-duration", "1800"]
     }
   }
 }

@@ -18,7 +18,7 @@ const debug = (msg: string): void => {
  * user talks to this socket (mode 0660, group = exec user's group) and the root
  * agent runs the command on its behalf. Non-interactive only.
  */
-export function createRootRelay(state: AgentState, socketPath: string): Server {
+export function createRootRelay(state: AgentState): Server {
   // allowHalfOpen: the client half-closes after sending its request; we must
   // still be able to write the reply afterwards.
   const server = createServer({ allowHalfOpen: true }, (conn) => {
@@ -73,7 +73,7 @@ export function createRootRelay(state: AgentState, socketPath: string): Server {
 }
 
 export function listenRootRelay(state: AgentState, socketPath: string): Promise<Server> {
-  const server = createRootRelay(state, socketPath);
+  const server = createRootRelay(state);
   mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o755 });
   if (existsSync(socketPath)) rmSync(socketPath, { force: true });
   return new Promise((resolve, reject) => {

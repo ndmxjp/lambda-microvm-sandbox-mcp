@@ -1,0 +1,41 @@
+name: Release
+
+# Publishes packages/mcp-server to npm when a tag like v0.1.0 is pushed.
+# Requires the NPM_TOKEN repository secret (an npm automation token) and the
+# tag to match the version in packages/mcp-server/package.json.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Check tag matches package version
+        run: |
+          pkg=$(node -p "require('./packages/mcp-server/package.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$pkg" != "$tag" ]; then echo "package.json version $pkg != tag $tag"; exit 1; fi
+      - name: Publish to npm
+        working-directory: packages/mcp-server
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

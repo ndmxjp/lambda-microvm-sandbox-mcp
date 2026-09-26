@@ -145,7 +145,11 @@ export class SandboxClient {
     if (!res.ok) {
       const err = parsed as { error?: string; message?: string } | undefined;
       const detail = err?.message ?? (text ? text.slice(0, 500) : res.statusText);
-      throw new SandboxError(`sandbox ${this.record.sandbox_id}: ${method} ${path} -> ${res.status} ${err?.error ?? ""} ${detail}`.trim(), res.status, err?.error);
+      throw new SandboxError(
+        `sandbox ${this.record.sandbox_id}: ${method} ${path} -> ${res.status} ${err?.error ?? ""} ${detail}`.trim(),
+        res.status,
+        err?.error,
+      );
     }
     return parsed as T;
   }

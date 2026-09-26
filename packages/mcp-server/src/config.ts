@@ -120,11 +120,16 @@ export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process
   // image lives), then the environment, then whatever the caller resolved from
   // the AWS profile (passed in as defaultRegion).
   const explicitRegion = typeof values["region"] === "string" ? (values["region"] as string) : undefined;
-  const region = explicitRegion ?? (imageArn ? regionFromArn(imageArn) : undefined) ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? defaultRegion;
+  const region =
+    explicitRegion ?? (imageArn ? regionFromArn(imageArn) : undefined) ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? defaultRegion;
   if (!region) throw new Error("could not determine the AWS region; pass --region or set AWS_REGION");
   const egressFlag = values["internet-egress"];
   const internetEgress =
-    typeof egressFlag === "boolean" ? egressFlag : env.SANDBOX_INTERNET_EGRESS === undefined ? DEFAULTS.internetEgress : env.SANDBOX_INTERNET_EGRESS !== "false";
+    typeof egressFlag === "boolean"
+      ? egressFlag
+      : env.SANDBOX_INTERNET_EGRESS === undefined
+        ? DEFAULTS.internetEgress
+        : env.SANDBOX_INTERNET_EGRESS !== "false";
   const tokenTtlMin = num(str("token-ttl", "SANDBOX_TOKEN_TTL_MIN"), DEFAULTS.tokenTtlMin, "token ttl");
   if (tokenTtlMin > 60) throw new Error("token ttl must be 60 minutes or less");
   const maxDurationS = num(str("max-duration", "SANDBOX_MAX_DURATION_S"), DEFAULTS.maxDurationS, "max duration");

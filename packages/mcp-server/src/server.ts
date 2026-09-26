@@ -61,7 +61,10 @@ export function createMcpServer(service: SandboxService): McpServer {
           .max(28_800)
           .optional()
           .describe(`Hard lifetime in seconds after which the VM is destroyed (default ${cfg.maxDurationS}, max 28800 = 8h).`),
-        internet_egress: z.boolean().optional().describe(`Allow outbound internet (package installs, git clone). Default ${cfg.internetEgress}.`),
+        internet_egress: z
+          .boolean()
+          .optional()
+          .describe(`Allow outbound internet (package installs, git clone). Default ${cfg.internetEgress}.`),
       },
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -92,7 +95,8 @@ export function createMcpServer(service: SandboxService): McpServer {
     "sandbox_read_file",
     {
       title: "Read a file",
-      description: "Read a file from the sandbox. Paths are absolute or relative to /workspace. Large files are truncated at max_bytes (default 16 MiB).",
+      description:
+        "Read a file from the sandbox. Paths are absolute or relative to /workspace. Large files are truncated at max_bytes (default 16 MiB).",
       inputSchema: {
         sandbox_id: sandboxId,
         path: z.string().min(1),
@@ -114,7 +118,11 @@ export function createMcpServer(service: SandboxService): McpServer {
         path: z.string().min(1),
         content: z.string(),
         encoding,
-        mode: z.string().regex(/^[0-7]{3,4}$/).optional().describe("Octal permission bits such as \"755\"."),
+        mode: z
+          .string()
+          .regex(/^[0-7]{3,4}$/)
+          .optional()
+          .describe('Octal permission bits such as "755".'),
       },
       annotations: { destructiveHint: true, idempotentHint: true },
     },
@@ -162,7 +170,11 @@ export function createMcpServer(service: SandboxService): McpServer {
       inputSchema: {
         sandbox_id: sandboxId,
         local_path: z.string().min(1).describe("Path on the machine running this MCP server."),
-        remote_path: z.string().min(1).default(".").describe("Destination directory in the sandbox, absolute or relative to /workspace (created if missing)."),
+        remote_path: z
+          .string()
+          .min(1)
+          .default(".")
+          .describe("Destination directory in the sandbox, absolute or relative to /workspace (created if missing)."),
         exclude: z.array(z.string()).optional().describe("tar --exclude patterns."),
       },
       annotations: { destructiveHint: true, openWorldHint: false },
@@ -174,7 +186,8 @@ export function createMcpServer(service: SandboxService): McpServer {
     "sandbox_download",
     {
       title: "Download to the local machine",
-      description: "Copy a directory or file from the sandbox into a local directory (extracted from a tar.gz). Same default excludes as sandbox_upload_dir.",
+      description:
+        "Copy a directory or file from the sandbox into a local directory (extracted from a tar.gz). Same default excludes as sandbox_upload_dir.",
       inputSchema: {
         sandbox_id: sandboxId,
         remote_path: z.string().min(1).describe("Path in the sandbox, absolute or relative to /workspace."),
@@ -190,7 +203,8 @@ export function createMcpServer(service: SandboxService): McpServer {
     "sandbox_suspend",
     {
       title: "Suspend sandbox",
-      description: "Suspend the VM now (state kept, no compute charges). It resumes automatically on the next call, or explicitly with sandbox_resume.",
+      description:
+        "Suspend the VM now (state kept, no compute charges). It resumes automatically on the next call, or explicitly with sandbox_resume.",
       inputSchema: { sandbox_id: sandboxId },
       annotations: { idempotentHint: true },
     },
@@ -234,7 +248,8 @@ export function createMcpServer(service: SandboxService): McpServer {
     "sandbox_list",
     {
       title: "List sandboxes",
-      description: "List sandboxes known to this server with their state, plus any MicroVMs in the account it does not manage. Sandboxes that Lambda already terminated are reported once with the reason and then forgotten.",
+      description:
+        "List sandboxes known to this server with their state, plus any MicroVMs in the account it does not manage. Sandboxes that Lambda already terminated are reported once with the reason and then forgotten.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
