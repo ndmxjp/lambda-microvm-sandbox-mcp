@@ -13,6 +13,8 @@ export interface SandboxRecord {
   /** Hard deadline after which Lambda terminates the VM. */
   expires_at: string;
   max_duration_s: number;
+  /** Set when the VM was started with an execution role (CloudWatch logging). */
+  execution_role_arn?: string;
 }
 
 interface RegistryFile {

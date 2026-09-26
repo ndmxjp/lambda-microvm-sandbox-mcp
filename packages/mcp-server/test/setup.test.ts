@@ -7,6 +7,8 @@ import { crc32, createZip } from "../src/zip.js";
 import {
   buildRolePolicy,
   defaultBucketName,
+  executionRolePolicy,
+  logGroupFor,
   runSetup,
   trustPolicy,
   type ImageBuildInput,
@@ -78,6 +80,11 @@ class FakeSetupClients implements SetupClients {
   async getRoleArn(name: string) {
     return this.roles.get(name);
   }
+  putPolicies: string[] = [];
+  async putRolePolicy(name: string, policy: string) {
+    JSON.parse(policy);
+    this.putPolicies.push(name);
+  }
   async createRole(name: string, trust: string, policy: string) {
     this.calls.push(`createRole ${name}`);
     JSON.parse(trust);
@@ -127,7 +134,10 @@ function opts(over: Partial<SetupOptions> = {}): SetupOptions {
     region: "ap-northeast-1",
     imageName: "sandbox-agent",
     buildRoleName: "LambdaMicrovmSandboxBuildRole",
+    executionRole: false,
+    executionRoleName: "LambdaMicrovmSandboxExecutionRole",
     memoryMib: 2048,
+    skipImage: false,
     dryRun: false,
     yes: true,
     timeoutMin: 1,
@@ -202,12 +212,31 @@ describe("setup", () => {
     expect(lines.join("\n")).toMatch(/build log line 2/);
   });
 
+  it("optionally creates a logs-only execution role and refreshes policies of roles it manages", async () => {
+    const c = new FakeSetupClients();
+    const { io: i } = io();
+    const r = await runSetup(opts({ executionRole: true }), c, i);
+    expect(r.executionRoleArn).toBe("arn:aws:iam::111122223333:role/LambdaMicrovmSandboxExecutionRole");
+    expect(r.created.executionRole).toBe(true);
+    // second run: roles exist, policies are re-applied, nothing recreated
+    const again = await runSetup(opts({ executionRole: true }), c, i);
+    expect(again.created).toEqual({ bucket: false, role: false, image: false, executionRole: false });
+    expect(c.putPolicies).toEqual(["LambdaMicrovmSandboxBuildRole", "LambdaMicrovmSandboxExecutionRole"]);
+    const pol = JSON.parse(executionRolePolicy("ap-northeast-1", "111122223333")) as {
+      Statement: Array<{ Action: string[]; Resource: string }>;
+    };
+    expect(pol.Statement).toHaveLength(1);
+    expect(pol.Statement[0]?.Action).toEqual(["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]);
+    expect(pol.Statement[0]?.Resource).toBe("arn:aws:logs:ap-northeast-1:111122223333:log-group:/aws/lambda-microvms/*");
+    expect(logGroupFor("sandbox-agent")).toBe("/aws/lambda-microvms/sandbox-agent");
+  });
+
   it("writes least-privilege policies with a confused-deputy guard", () => {
     const trust = JSON.parse(trustPolicy("111122223333")) as { Statement: Array<{ Condition: unknown; Principal: unknown }> };
     expect(trust.Statement[0]?.Principal).toEqual({ Service: "lambda.amazonaws.com" });
     expect(trust.Statement[0]?.Condition).toEqual({ StringEquals: { "aws:SourceAccount": "111122223333" } });
     const policy = JSON.parse(buildRolePolicy("b", "ap-northeast-1", "111122223333")) as { Statement: Array<{ Resource: string }> };
     expect(policy.Statement[0]?.Resource).toBe("arn:aws:s3:::b/microvm-images/*");
-    expect(policy.Statement[1]?.Resource).toBe("arn:aws:logs:ap-northeast-1:111122223333:log-group:/aws/lambda/microvms/*");
+    expect(policy.Statement[1]?.Resource).toBe("arn:aws:logs:ap-northeast-1:111122223333:log-group:/aws/lambda-microvms/*");
   });
 });

@@ -11,6 +11,7 @@ import {
   type RunMicrovmCommandInput,
 } from "@aws-sdk/client-lambda-microvms";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { CloudWatchLogsClient, GetLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type MicrovmState = "PENDING" | "RUNNING" | "SUSPENDING" | "SUSPENDED" | "TERMINATING" | "TERMINATED" | string;
@@ -38,6 +39,7 @@ export interface MicrovmSummary {
 export interface RunMicrovmParams {
   imageArn: string;
   imageVersion: string;
+  executionRoleArn?: string;
   runHookPayload: string;
   maximumDurationInSeconds: number;
   idlePolicy: { maxIdleDurationSeconds: number; suspendedDurationSeconds: number; autoResumeEnabled: boolean };
@@ -56,6 +58,30 @@ export interface MicrovmApi {
   terminateMicrovm(id: string): Promise<MicrovmState>;
   createAuthToken(id: string, expirationInMinutes: number, ports: number[]): Promise<string>;
   latestActiveImageVersion(imageArn: string): Promise<string | undefined>;
+}
+
+/** Read a sandbox's CloudWatch log stream (only available with an execution role). */
+export interface LogsApi {
+  tail(logGroup: string, logStream: string, limit: number, startTime?: number): Promise<Array<{ timestamp: number; message: string }>>;
+}
+
+export class RealLogsApi implements LogsApi {
+  private readonly client: CloudWatchLogsClient;
+  constructor(region: string) {
+    this.client = new CloudWatchLogsClient({ region });
+  }
+  async tail(logGroup: string, logStream: string, limit: number, startTime?: number) {
+    const r = await this.client.send(
+      new GetLogEventsCommand({
+        logGroupName: logGroup,
+        logStreamName: logStream,
+        limit,
+        startFromHead: false,
+        ...(startTime ? { startTime } : {}),
+      }),
+    );
+    return (r.events ?? []).map((e) => ({ timestamp: e.timestamp ?? 0, message: (e.message ?? "").trimEnd() }));
+  }
 }
 
 export interface TransferStore {
@@ -80,6 +106,7 @@ export class RealMicrovmApi implements MicrovmApi {
     const input: RunMicrovmCommandInput = {
       imageIdentifier: p.imageArn,
       imageVersion: p.imageVersion,
+      ...(p.executionRoleArn ? { executionRoleArn: p.executionRoleArn } : {}),
       runHookPayload: p.runHookPayload,
       maximumDurationInSeconds: p.maximumDurationInSeconds,
       idlePolicy: p.idlePolicy,

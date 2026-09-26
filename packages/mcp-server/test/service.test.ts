@@ -316,6 +316,41 @@ describe("SandboxService end to end against an in-process agent", () => {
     await slow.cleanup();
   });
 
+  it("passes the execution role through and serves CloudWatch logs only when configured", async () => {
+    const noRole = new SandboxService({ config: testConfig(), api, accountId, registry: new Registry(null), log: () => undefined });
+    const a = await noRole.create();
+    expect(api.runCalls.at(-1)?.executionRoleArn).toBeUndefined();
+    await expect(noRole.vmLogs(a.sandbox_id)).rejects.toThrow(/no execution role/);
+    expect((await noRole.status(a.sandbox_id)).cloudwatch_logs).toBeUndefined();
+    await noRole.destroy(a.sandbox_id);
+
+    const roleArn = "arn:aws:iam::123456789012:role/LambdaMicrovmSandboxExecutionRole";
+    const tailed: unknown[] = [];
+    const withRole = new SandboxService({
+      config: testConfig({ executionRoleArn: roleArn }),
+      api,
+      accountId,
+      registry: new Registry(null),
+      logs: {
+        tail: async (group, stream, limit) => {
+          tailed.push([group, stream, limit]);
+          return [{ timestamp: 1_700_000_000_000, message: "[sandbox-agent] hook: run" }];
+        },
+      },
+      log: () => undefined,
+    });
+    const b = await withRole.create();
+    expect(api.runCalls.at(-1)?.executionRoleArn).toBe(roleArn);
+    expect((await withRole.status(b.sandbox_id)).cloudwatch_logs).toEqual({
+      log_group: "/aws/lambda-microvms/sandbox-agent",
+      log_stream: b.sandbox_id,
+    });
+    const logs = await withRole.vmLogs(b.sandbox_id, 50);
+    expect(tailed).toEqual([["/aws/lambda-microvms/sandbox-agent", b.sandbox_id, 50]]);
+    expect(logs.events[0]?.message).toContain("hook: run");
+    await withRole.destroy(b.sandbox_id);
+  });
+
   it("fails clearly when the image has no active version", async () => {
     const noImage = new FakeMicrovmApi();
     noImage.latestVersion = undefined;
@@ -430,6 +465,7 @@ describe("MCP surface", () => {
         "sandbox_status",
         "sandbox_suspend",
         "sandbox_upload_dir",
+        "sandbox_vm_logs",
         "sandbox_write_file",
       ].sort(),
     );

@@ -14,6 +14,8 @@ export interface Config {
   internetEgress: boolean;
   transferBucket: string | undefined;
   transferPrefix: string;
+  /** Optional IAM role assumed by the VM. Only needed to stream agent/app logs to CloudWatch. */
+  executionRoleArn: string | undefined;
   stateFile: string;
   tokenTtlMin: number;
   tokenRefreshMarginS: number;
@@ -52,6 +54,8 @@ Server options (each also settable via the environment variable in parentheses):
   --suspended <sec>          idlePolicy.suspendedDurationSeconds (SANDBOX_SUSPENDED_S) [default: ${DEFAULTS.suspendedS}]
   --no-internet-egress       Do not attach INTERNET_EGRESS (SANDBOX_INTERNET_EGRESS=false)
   --transfer-bucket <name>   S3 bucket for large transfers (SANDBOX_TRANSFER_BUCKET) [default: direct chunked transfer]
+  --execution-role-arn <arn> IAM role for the VM so its stdout/stderr reach CloudWatch Logs (SANDBOX_EXECUTION_ROLE_ARN)
+                             [default: none; create one with 'setup --execution-role']
   --state-file <path>        Sandbox registry (SANDBOX_STATE_FILE) [default: ~/.lambda-sandbox/sandboxes.json]
   --token-ttl <min>          Auth token lifetime 1-60 (SANDBOX_TOKEN_TTL_MIN) [default: ${DEFAULTS.tokenTtlMin}]
   --print-config             Print the resolved configuration and exit
@@ -63,7 +67,9 @@ Setup options:
   --bucket <name>            Existing bucket for the artifact                [default: lambda-microvm-sandbox-<account>-<region>]
   --build-role-arn <arn>     Existing build role instead of creating one
   --build-role-name <name>   Name of the role to create                      [default: LambdaMicrovmSandboxBuildRole]
+  --execution-role           Also create LambdaMicrovmSandboxExecutionRole (CloudWatch Logs write only)
   --memory-mib <n>           VM size; one image has one size                 [default: 2048]
+  --skip-image               Only create or refresh the bucket and roles
   --dry-run                  Show what would be created and exit
   --yes                      Do not ask for confirmation
 `;
@@ -95,7 +101,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (a === "-h" || a === "--help") help = true;
     else if (a === "--print-config") printConfig = true;
     else if (a === "--no-internet-egress") values["internet-egress"] = false;
-    else if (a === "--dry-run" || a === "--yes") values[a.slice(2)] = true;
+    else if (a === "--dry-run" || a === "--yes" || a === "--execution-role" || a === "--skip-image") values[a.slice(2)] = true;
     else if (a.startsWith("--")) {
       const eq = a.indexOf("=");
       const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
@@ -145,6 +151,7 @@ export function loadConfig(argv: string[] = [], env: NodeJS.ProcessEnv = process
     internetEgress,
     transferBucket: str("transfer-bucket", "SANDBOX_TRANSFER_BUCKET"),
     transferPrefix: env.SANDBOX_TRANSFER_PREFIX ?? DEFAULTS.transferPrefix,
+    executionRoleArn: str("execution-role-arn", "SANDBOX_EXECUTION_ROLE_ARN"),
     stateFile: str("state-file", "SANDBOX_STATE_FILE") ?? path.join(os.homedir(), ".lambda-sandbox", "sandboxes.json"),
     tokenTtlMin,
     tokenRefreshMarginS: DEFAULTS.tokenRefreshMarginS,

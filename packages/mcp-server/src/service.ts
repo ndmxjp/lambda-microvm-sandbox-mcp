@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import type { MicrovmApi, MicrovmInfo, TransferStore } from "./aws.js";
+import type { LogsApi, MicrovmApi, MicrovmInfo, TransferStore } from "./aws.js";
+import { logGroupFor } from "./setup.js";
 import { SandboxClient, SandboxError, TokenManager, defaultDeps, type ClientDeps } from "./client.js";
 import { connectorArn, imageArnFor, setupHint, type Config } from "./config.js";
 import type { Registry, SandboxRecord } from "./registry.js";
@@ -14,6 +15,7 @@ export interface ServiceDeps {
   accountId: () => Promise<string>;
   registry: Registry;
   store?: TransferStore | null;
+  logs?: LogsApi | null;
   client?: Partial<ClientDeps>;
   log?: (msg: string) => void;
 }
@@ -35,6 +37,8 @@ export interface SandboxSummary {
   image_version: string;
   /** Active local port forwards (local URL -> VM port). */
   port_forwards?: Array<{ url: string; remote_port: number }>;
+  /** Where the VM's stdout/stderr go when an execution role is configured. */
+  cloudwatch_logs?: { log_group: string; log_stream: string };
 }
 
 export interface PortForwardResult {
@@ -113,7 +117,36 @@ export class SandboxService {
     if (info?.stateReason) s.state_reason = info.stateReason;
     const fw = this.forwards.get(record.sandbox_id);
     if (fw && fw.size > 0) s.port_forwards = [...fw.values()].map((f) => ({ url: f.url, remote_port: f.remote_port }));
+    if (record.execution_role_arn) s.cloudwatch_logs = { log_group: logGroupFor(this.config.imageName), log_stream: record.microvm_id };
     return s;
+  }
+
+  /** Tail the VM's CloudWatch log stream (agent stderr + anything the app prints to the container's stdout). */
+  async vmLogs(
+    id: string,
+    limit = 100,
+    sinceMinutes?: number,
+  ): Promise<{ sandbox_id: string; log_group: string; log_stream: string; events: Array<{ time: string; message: string }> }> {
+    const record = this.deps.registry.require(id);
+    if (!record.execution_role_arn) {
+      throw new SandboxError(
+        "this sandbox has no execution role, so nothing is streamed to CloudWatch. Start the MCP server with --execution-role-arn (create the role with `setup --execution-role`) and create a new sandbox. Logs of processes started with background=true are still readable from their log_path.",
+      );
+    }
+    if (!this.deps.logs) throw new SandboxError("CloudWatch Logs client not configured");
+    const group = logGroupFor(this.config.imageName);
+    const events = await this.deps.logs.tail(
+      group,
+      record.microvm_id,
+      Math.min(Math.max(limit, 1), 1000),
+      sinceMinutes ? Date.now() - sinceMinutes * 60_000 : undefined,
+    );
+    return {
+      sandbox_id: id,
+      log_group: group,
+      log_stream: record.microvm_id,
+      events: events.map((e) => ({ time: new Date(e.timestamp).toISOString(), message: e.message })),
+    };
   }
 
   /** Expose a port inside the sandbox as http://127.0.0.1:<local_port>. */
@@ -191,6 +224,7 @@ export class SandboxService {
     const info = await this.deps.api.runMicrovm({
       imageArn,
       imageVersion,
+      ...(cfg.executionRoleArn ? { executionRoleArn: cfg.executionRoleArn } : {}),
       runHookPayload: JSON.stringify(payload),
       maximumDurationInSeconds: maxDuration,
       idlePolicy: { maxIdleDurationSeconds: cfg.idleS, suspendedDurationSeconds: cfg.suspendedS, autoResumeEnabled: true },
@@ -210,6 +244,7 @@ export class SandboxService {
       created_at: createdAt.toISOString(),
       expires_at: new Date(createdAt.getTime() + maxDuration * 1000).toISOString(),
       max_duration_s: maxDuration,
+      ...(cfg.executionRoleArn ? { execution_role_arn: cfg.executionRoleArn } : {}),
     };
     this.deps.registry.put(record);
     this.log(`started ${record.sandbox_id} (${record.endpoint})`);

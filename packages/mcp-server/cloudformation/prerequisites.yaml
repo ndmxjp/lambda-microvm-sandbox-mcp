@@ -78,12 +78,44 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/microvms/*
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda-microvms/*
+
+  # Optional: lets running sandboxes stream stdout/stderr to CloudWatch Logs.
+  # Pass its ARN to the MCP server with --execution-role-arn. Nothing else is granted.
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Execution role for lambda-microvm-sandbox-mcp sandboxes (CloudWatch Logs only)
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: MicrovmRuntimeLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda-microvms/*
 
 Outputs:
   BucketName:
     Value: !Ref ArtifactBucket
   BuildRoleArn:
     Value: !GetAtt BuildRole.Arn
+  ExecutionRoleArn:
+    Value: !GetAtt ExecutionRole.Arn
   SetupCommand:
     Value: !Sub npx lambda-microvm-sandbox-mcp setup --region ${AWS::Region} --bucket ${ArtifactBucket} --build-role-arn ${BuildRole.Arn}

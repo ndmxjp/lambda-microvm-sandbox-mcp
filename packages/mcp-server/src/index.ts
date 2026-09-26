@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
-import { RealMicrovmApi, S3TransferStore } from "./aws.js";
+import { RealLogsApi, RealMicrovmApi, S3TransferStore } from "./aws.js";
 import { RealSetupClients } from "./aws-setup.js";
 import { loadConfig, parseArgs, USAGE, DEFAULTS } from "./config.js";
 import { runDoctor } from "./doctor.js";
@@ -61,6 +61,7 @@ async function serve(argv: string[]): Promise<void> {
     },
     registry: new Registry(config.stateFile),
     store: config.transferBucket ? new S3TransferStore(config.region, config.transferBucket) : null,
+    logs: config.executionRoleArn ? new RealLogsApi(config.region) : null,
   });
   const server = createMcpServer(service);
   await server.connect(new StdioServerTransport());
@@ -83,7 +84,10 @@ async function setup(argv: string[]): Promise<void> {
       ...(bucket ? { bucket } : {}),
       ...(buildRoleArn ? { buildRoleArn } : {}),
       buildRoleName: str("build-role-name") ?? SETUP_DEFAULTS.buildRoleName,
+      executionRole: values["execution-role"] === true,
+      executionRoleName: str("execution-role-name") ?? SETUP_DEFAULTS.executionRoleName,
       memoryMib: Number(str("memory-mib") ?? SETUP_DEFAULTS.memoryMib),
+      skipImage: values["skip-image"] === true,
       dryRun: values["dry-run"] === true,
       yes: values["yes"] === true,
       timeoutMin: Number(str("timeout-min") ?? SETUP_DEFAULTS.timeoutMin),
@@ -96,7 +100,12 @@ async function setup(argv: string[]): Promise<void> {
     console.error("[setup] dry run: nothing was created");
     return;
   }
+  if (result.imageVersion === "(skipped)") {
+    console.error(`[setup] bucket and roles are ready${result.executionRoleArn ? `; execution role ${result.executionRoleArn}` : ""}`);
+    return;
+  }
   const nameFlag = result.imageArn.endsWith(`:${DEFAULTS.imageName}`) ? [] : ["--image-name", result.imageArn.split(":").pop() as string];
+  const roleFlag = result.executionRoleArn ? ["--execution-role-arn", result.executionRoleArn] : [];
   console.log(`\nImage ${result.imageArn} version ${result.imageVersion} is ready.\n`);
   console.log("Add this to your agent's MCP configuration (Claude Code: .mcp.json / Kiro: .kiro/settings/mcp.json):\n");
   console.log(
@@ -105,7 +114,7 @@ async function setup(argv: string[]): Promise<void> {
         mcpServers: {
           "lambda-sandbox": {
             command: "npx",
-            args: ["-y", "lambda-microvm-sandbox-mcp", "--region", region, ...nameFlag],
+            args: ["-y", "lambda-microvm-sandbox-mcp", "--region", region, ...nameFlag, ...roleFlag],
           },
         },
       },

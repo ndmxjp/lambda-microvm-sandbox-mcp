@@ -281,6 +281,22 @@ export function createMcpServer(service: SandboxService): McpServer {
   );
 
   server.registerTool(
+    "sandbox_vm_logs",
+    {
+      title: "Read the VM's CloudWatch logs",
+      description:
+        "Tail the sandbox VM's own log stream in CloudWatch (the in-VM agent's messages, lifecycle hook events, crashes). Only available when the server runs with --execution-role-arn; otherwise explains what to do. For the output of a background command use its log_path with sandbox_read_file instead.",
+      inputSchema: {
+        sandbox_id: sandboxId,
+        limit: z.number().int().min(1).max(1000).optional().describe("Number of most recent events (default 100)."),
+        since_minutes: z.number().int().min(1).optional().describe("Only events newer than this many minutes."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ sandbox_id, limit, since_minutes }) => run(() => service.vmLogs(sandbox_id, limit, since_minutes)),
+  );
+
+  server.registerTool(
     "sandbox_list",
     {
       title: "List sandboxes",

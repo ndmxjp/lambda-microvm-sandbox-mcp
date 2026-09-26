@@ -147,6 +147,10 @@ export class RealSetupClients implements SetupClients {
     return arn;
   }
 
+  async putRolePolicy(name: string, policy: string): Promise<void> {
+    await this.iam.send(new PutRolePolicyCommand({ RoleName: name, PolicyName: "MicrovmImageBuild", PolicyDocument: policy }));
+  }
+
   async imageExists(imageArn: string): Promise<boolean> {
     try {
       await this.microvms.send(new GetMicrovmImageCommand({ imageIdentifier: imageArn }));
@@ -193,7 +197,7 @@ export class RealSetupClients implements SetupClients {
 
   async buildLogTail(imageName: string): Promise<string[]> {
     try {
-      const r = await this.logs.send(new FilterLogEventsCommand({ logGroupName: `/aws/lambda/microvms/${imageName}`, limit: 60 }));
+      const r = await this.logs.send(new FilterLogEventsCommand({ logGroupName: `/aws/lambda-microvms/${imageName}`, limit: 60 }));
       return (r.events ?? []).map((e) => `${new Date(e.timestamp ?? 0).toISOString()} ${(e.message ?? "").trimEnd()}`);
     } catch (err) {
       return [`(could not read build log: ${String(err)})`];

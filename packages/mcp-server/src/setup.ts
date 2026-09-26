@@ -23,7 +23,12 @@ export interface SetupOptions {
   /** Existing build role ARN to use instead of creating one. */
   buildRoleArn?: string;
   buildRoleName: string;
+  /** Also create an execution role that lets VMs stream stdout/stderr to CloudWatch Logs. */
+  executionRole: boolean;
+  executionRoleName: string;
   memoryMib: number;
+  /** Only create/refresh the bucket and roles; do not upload or build the image. */
+  skipImage: boolean;
   dryRun: boolean;
   /** Skip the interactive confirmation. */
   yes: boolean;
@@ -35,6 +40,7 @@ export interface SetupOptions {
 export const SETUP_DEFAULTS = {
   imageName: "sandbox-agent",
   buildRoleName: "LambdaMicrovmSandboxBuildRole",
+  executionRoleName: "LambdaMicrovmSandboxExecutionRole",
   memoryMib: 2048,
   timeoutMin: 30,
 } as const;
@@ -59,6 +65,8 @@ export interface SetupClients {
   putObject(bucket: string, key: string, body: Uint8Array): Promise<void>;
   getRoleArn(name: string): Promise<string | undefined>;
   createRole(name: string, trustPolicy: string, inlinePolicy: string): Promise<string>;
+  /** Replace the inline policy of a role we manage (keeps existing roles current). */
+  putRolePolicy(name: string, inlinePolicy: string): Promise<void>;
   imageExists(imageArn: string): Promise<boolean>;
   createImage(input: ImageBuildInput): Promise<void>;
   /** Returns the newly created version. */
@@ -78,8 +86,14 @@ export interface SetupResult {
   imageVersion: string;
   bucket: string;
   buildRoleArn: string;
-  created: { bucket: boolean; role: boolean; image: boolean };
+  executionRoleArn?: string;
+  created: { bucket: boolean; role: boolean; image: boolean; executionRole?: boolean };
   dryRun: boolean;
+}
+
+/** Default CloudWatch log group Lambda uses for an image's build and runtime logs. */
+export function logGroupFor(imageName: string): string {
+  return `/aws/lambda-microvms/${imageName}`;
 }
 
 export const HOOKS = {
@@ -123,7 +137,21 @@ export function buildRolePolicy(bucket: string, region: string, account: string)
       {
         Effect: "Allow",
         Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-        Resource: `arn:aws:logs:${region}:${account}:log-group:/aws/lambda/microvms/*`,
+        Resource: `arn:aws:logs:${region}:${account}:log-group:/aws/lambda-microvms/*`,
+      },
+    ],
+  });
+}
+
+/** Execution role policy: only CloudWatch Logs, so a sandbox can stream its stdout/stderr and nothing else. */
+export function executionRolePolicy(region: string, account: string): string {
+  return JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+        Resource: `arn:aws:logs:${region}:${account}:log-group:/aws/lambda-microvms/*`,
       },
     ],
   });
@@ -188,6 +216,7 @@ export async function runSetup(opts: SetupOptions, clients: SetupClients, io: Se
 
   const bucketExists = await clients.bucketExists(bucket);
   const existingRole = opts.buildRoleArn ?? (await clients.getRoleArn(opts.buildRoleName));
+  const existingExecRole = opts.executionRole ? await clients.getRoleArn(opts.executionRoleName) : undefined;
   const imageExists = await clients.imageExists(imageArn);
   const assets = readImageAssets(opts.imageDir);
   const key = `microvm-images/${opts.imageName}/${assets.sha}.zip`;
@@ -197,14 +226,28 @@ export async function runSetup(opts: SetupOptions, clients: SetupClients, io: Se
   io.log(
     `build role     ${existingRole ?? `${opts.buildRoleName} (will create: trusts lambda.amazonaws.com, reads the bucket, writes build logs)`}`,
   );
+  if (opts.executionRole) {
+    io.log(
+      `execution role ${existingExecRole ?? `${opts.executionRoleName} (will create: CloudWatch Logs write only; VMs get no other AWS access)`}`,
+    );
+  }
   io.log(`image          ${imageArn} ${imageExists ? "(exists: will build a new version)" : "(will create version 1.0)"}`);
   io.log(`artifact       s3://${bucket}/${key} (${assets.entries.map((e) => e.name).join(", ")})`);
   io.log(`size           ${opts.memoryMib} MiB memory, ARM64, INTERNET_EGRESS during build`);
   io.log("cost           image snapshots are billed for storage (about $0.08/GB-month, minimum one week)");
 
-  const created = { bucket: !bucketExists, role: !existingRole, image: !imageExists };
+  const created: SetupResult["created"] = { bucket: !bucketExists, role: !existingRole, image: !imageExists };
+  if (opts.executionRole) created.executionRole = !existingExecRole;
   if (opts.dryRun) {
-    return { imageArn, imageVersion: "(dry run)", bucket, buildRoleArn: existingRole ?? "(to be created)", created, dryRun: true };
+    return {
+      imageArn,
+      imageVersion: "(dry run)",
+      bucket,
+      buildRoleArn: existingRole ?? "(to be created)",
+      ...(opts.executionRole ? { executionRoleArn: existingExecRole ?? "(to be created)" } : {}),
+      created,
+      dryRun: true,
+    };
   }
   if (!opts.yes && !(await io.confirm("Proceed?"))) throw new Error("aborted");
 
@@ -218,8 +261,32 @@ export async function runSetup(opts: SetupOptions, clients: SetupClients, io: Se
   if (!buildRoleArn) {
     io.log(`creating role ${opts.buildRoleName}`);
     buildRoleArn = await clients.createRole(opts.buildRoleName, trustPolicy(account), buildRolePolicy(bucket, opts.region, account));
+  } else if (!opts.buildRoleArn) {
+    // A role we created earlier: keep its policy in sync with this version.
+    await clients.putRolePolicy(opts.buildRoleName, buildRolePolicy(bucket, opts.region, account));
+  }
+  let executionRoleArn = existingExecRole;
+  if (opts.executionRole) {
+    if (!executionRoleArn) {
+      io.log(`creating role ${opts.executionRoleName}`);
+      executionRoleArn = await clients.createRole(opts.executionRoleName, trustPolicy(account), executionRolePolicy(opts.region, account));
+    } else {
+      await clients.putRolePolicy(opts.executionRoleName, executionRolePolicy(opts.region, account));
+    }
   }
 
+  if (opts.skipImage) {
+    io.log("skipping the image build (--skip-image)");
+    return {
+      imageArn,
+      imageVersion: "(skipped)",
+      bucket,
+      buildRoleArn,
+      ...(executionRoleArn ? { executionRoleArn } : {}),
+      created,
+      dryRun: false,
+    };
+  }
   io.log(`uploading ${key}`);
   await clients.putObject(bucket, key, createZip(assets.entries));
 
@@ -250,5 +317,13 @@ export async function runSetup(opts: SetupOptions, clients: SetupClients, io: Se
     for (const line of await clients.buildLogTail(opts.imageName)) io.log(`  ${line}`);
     throw err;
   }
-  return { imageArn, imageVersion: version, bucket, buildRoleArn, created, dryRun: false };
+  return {
+    imageArn,
+    imageVersion: version,
+    bucket,
+    buildRoleArn,
+    ...(executionRoleArn ? { executionRoleArn } : {}),
+    created,
+    dryRun: false,
+  };
 }
