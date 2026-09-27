@@ -9,6 +9,10 @@ updates:
         patterns: ["@aws-sdk/*"]
       dev:
         dependency-type: development
+    ignore:
+      # typescript-eslint does not support TypeScript 7 yet; take minors only until it does.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
