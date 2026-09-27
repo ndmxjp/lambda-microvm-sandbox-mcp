@@ -10,6 +10,8 @@ description = "Dummy secrets in tests and CI scripts"
 regexes = [
   '''test-secret-0123456789abcdef''',
   '''ci-secret-0123456789abcdef''',
+  # RFC 6455's example Sec-WebSocket-Key, used in the port-forward test handshake.
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
 ]
 paths = [
   '''package-lock\.json''',
