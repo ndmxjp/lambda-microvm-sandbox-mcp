@@ -12,7 +12,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { request as httpsRequest } from "node:https";
 import type { AddressInfo, Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
-import { connect as netConnect } from "node:net";
+import { connect as netConnect, isIP } from "node:net";
 
 export interface ForwardOptions {
   endpoint: string;
@@ -20,6 +20,10 @@ export interface ForwardOptions {
   localPort?: number;
   getToken: () => Promise<string>;
   log?: (msg: string) => void;
+  /** Extra CA certificates for the upstream TLS connection (tests use a self-signed endpoint). */
+  ca?: string;
+  /** How long to keep retrying idempotent requests that get 502 while a suspended VM resumes. */
+  resumeWaitMs?: number;
 }
 
 export interface PortForward {
@@ -51,6 +55,8 @@ export async function startPortForward(opts: ForwardOptions): Promise<PortForwar
   const { host, port, secure } = endpointParts(opts.endpoint);
   const log = opts.log ?? (() => undefined);
   const requestFn = secure ? httpsRequest : httpRequest;
+  const tlsExtra = opts.ca ? { ca: opts.ca } : {};
+  const resumeWaitMs = opts.resumeWaitMs ?? 60_000;
   // Upgraded sockets leave the http.Server's bookkeeping, so track them to close cleanly.
   const tunnels = new Set<Socket>();
 
@@ -70,18 +76,31 @@ export async function startPortForward(opts: ForwardOptions): Promise<PortForwar
       headers["host"] = host;
       headers["x-aws-proxy-auth"] = token;
       headers["x-aws-proxy-port"] = String(opts.remotePort);
-      const upstream = requestFn({ host, port, method: req.method, path: req.url, headers }, (up) => {
-        const outHeaders: Record<string, string | string[]> = {};
-        for (const [k, v] of Object.entries(up.headers)) if (v !== undefined && k !== "connection") outHeaders[k] = v;
-        res.writeHead(up.statusCode ?? 502, outHeaders);
-        up.pipe(res);
-      });
-      upstream.on("error", (err) => {
-        log(`forward ${opts.remotePort}: ${err.message}`);
-        if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" });
-        res.end(`port forward error: ${err.message}`);
-      });
-      req.pipe(upstream);
+      // A 502 from Lambda usually means the VM is resuming from suspend. For
+      // requests without a body we retry quietly so a browser reload just works.
+      const idempotent = req.method === "GET" || req.method === "HEAD";
+      const deadline = Date.now() + resumeWaitMs;
+      const attempt = (n: number): void => {
+        const upstream = requestFn({ host, port, method: req.method, path: req.url, headers, ...tlsExtra }, (up) => {
+          if (up.statusCode === 502 && idempotent && Date.now() < deadline) {
+            up.resume();
+            setTimeout(() => attempt(n + 1), Math.min(500 * 2 ** n, 5000));
+            return;
+          }
+          const outHeaders: Record<string, string | string[]> = {};
+          for (const [k, v] of Object.entries(up.headers)) if (v !== undefined && k !== "connection") outHeaders[k] = v;
+          res.writeHead(up.statusCode ?? 502, outHeaders);
+          up.pipe(res);
+        });
+        upstream.on("error", (err) => {
+          log(`forward ${opts.remotePort}: ${err.message}`);
+          if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" });
+          res.end(`port forward error: ${err.message}`);
+        });
+        if (idempotent) upstream.end();
+        else req.pipe(upstream);
+      };
+      attempt(0);
     })();
   });
 
@@ -106,11 +125,16 @@ export async function startPortForward(opts: ForwardOptions): Promise<PortForwar
       ];
       const lines = [`${req.method} ${req.url} HTTP/1.1`, `Host: ${host}`];
       for (const [k, v] of Object.entries(req.headers)) {
-        if (k === "host" || k === "sec-websocket-protocol" || v === undefined) continue;
+        // Drop permessage-deflate: the Lambda proxy negotiates it hop by hop, so
+        // compressed (RSV1) frames from the browser reach the app uncompressed
+        // -> "Invalid WebSocket frame: RSV1 must be clear" in ws-based servers.
+        if (k === "host" || k === "sec-websocket-protocol" || k === "sec-websocket-extensions" || v === undefined) continue;
         lines.push(`${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
       }
       lines.push(`Sec-WebSocket-Protocol: ${protocols.join(", ")}`);
-      const upstream = secure ? tlsConnect({ host, port, servername: host }) : netConnect({ host, port });
+      const upstream = secure
+        ? tlsConnect({ host, port, ...(isIP(host) ? {} : { servername: host }), ...tlsExtra })
+        : netConnect({ host, port });
       tunnels.add(client);
       tunnels.add(upstream);
       client.on("close", () => {
@@ -126,8 +150,10 @@ export async function startPortForward(opts: ForwardOptions): Promise<PortForwar
         client.destroy();
       });
       client.on("error", () => upstream.destroy());
-      upstream.on("connect", () => upstream.write(`${lines.join("\r\n")}\r\n\r\n`));
-      upstream.on("secureConnect", () => upstream.write(`${lines.join("\r\n")}\r\n\r\n`));
+      // Write the handshake exactly once: a TLS socket emits both "connect" and
+      // "secureConnect", and sending it twice made the second copy arrive as a
+      // bogus WebSocket frame ("G" = 0x47 has RSV1 set) that crashed ws-based servers.
+      upstream.once(secure ? "secureConnect" : "connect", () => upstream.write(`${lines.join("\r\n")}\r\n\r\n`));
       // Read the upstream handshake, strip the lambda-* subprotocols the client
       // never asked for, then splice the sockets together.
       let buf = Buffer.alloc(0);

@@ -296,3 +296,10 @@ MicroVM イメージはアカウント間で共有できない（リソースポ
 - 再現試行 2（Excalidraw の clone / install / build → 配信 → ポートフォワード → idle 120 秒 → suspend 2.3 分 → フォワード経由の HTTP で resume）: 再現せず。resume 2.0 秒、agent は PID 1 で生存（RSS 59MB）、フックの記録も正常
 - 結論: 2 回の再現で問題なし。原因は特定できていない（プラットフォーム側の一時的な事象か、当時の環境固有の要因）。次に発生した場合は `--execution-role-arn` を付けて VM ログを取得する。ブラウザで開き続ける用途には `sandbox_create` の `idle_s` を長めに指定して suspend/resume の回数を減らすことを推奨
 - ビルドロールのログ権限パスの誤り（`/aws/lambda/microvms/*`）を修正。3.0〜5.0 のビルドログが出ていなかった原因
+
+## 19. 開発サーバー（Vite + HMR）の検証（2026-09-28 JST）
+
+- VM 内で `npm create vite@latest`（React + TS）→ `vite --host` を `background` 起動 → `sandbox_port_forward 5173` → ローカルの Chrome で表示、`App.tsx` を `sandbox_exec` で書き換えるとリロードなしで見出しが更新（HMR）されることを確認
+- 発見したバグ: ポートフォワードが TLS 接続で `connect` と `secureConnect` の両方でアップグレード要求を書き、2 通目の `GET ...` が WebSocket フレームとして届いて（先頭 `G` = 0x47 は RSV1 ビットが立つ）Vite が `RSV1 must be clear` でクラッシュしていた。`once(secureConnect)` に修正し、自己署名 TLS のフェイクエンドポイントで「ハンドシェイクは 1 回だけ、余計なバイトが流れない」ことを検証するテストを追加
+- あわせて: idempotent なリクエストは 502（resume 中）を最大 60 秒リトライ、`Sec-WebSocket-Extensions` を転送しない、Vite の `server.allowedHosts` が必要な点をツール説明に追記
+- 注意: Vite 以降の dev server は Host ヘッダー検査を持つ。VM にはエンドポイントのホスト名で届くので `allowedHosts: true` が必要

@@ -4,6 +4,8 @@ import { connect } from "node:net";
 import { createHash } from "node:crypto";
 import { startPortForward, type PortForward } from "../src/forward.js";
 
+const seenUpgradeHeaders: Record<string, string>[] = [];
+
 /** Stands in for the MicroVM endpoint: requires the Lambda headers and echoes them. */
 function fakeEndpoint(expectedToken: () => string): Promise<{ server: Server; url: string }> {
   const server = createServer((req, res) => {
@@ -25,6 +27,7 @@ function fakeEndpoint(expectedToken: () => string): Promise<{ server: Server; ur
     });
   });
   server.on("upgrade", (req, socket) => {
+    seenUpgradeHeaders.push({ ...req.headers } as Record<string, string>);
     const protos = String(req.headers["sec-websocket-protocol"] ?? "")
       .split(",")
       .map((s) => s.trim());
@@ -101,12 +104,15 @@ describe("port forward", () => {
         }
       });
       sock.write(
-        "GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: vite-hmr\r\n\r\n",
+        "GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: vite-hmr\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n",
       );
     });
     expect(reply.startsWith("HTTP/1.1 101")).toBe(true);
     const protoLine = reply.split("\r\n").find((l) => /^sec-websocket-protocol/i.test(l));
     expect(protoLine).toBe("Sec-WebSocket-Protocol: vite-hmr");
+    // compression must not be negotiated across the Lambda proxy
+    expect(seenUpgradeHeaders.at(-1)?.["sec-websocket-extensions"]).toBeUndefined();
+    expect(seenUpgradeHeaders.at(-1)?.["sec-websocket-key"]).toBe("dGhlIHNhbXBsZSBub25jZQ==");
   });
 
   it("returns 502 when the upstream is unreachable", async () => {

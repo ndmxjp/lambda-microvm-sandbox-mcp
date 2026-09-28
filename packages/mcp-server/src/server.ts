@@ -101,7 +101,7 @@ export function createMcpServer(service: SandboxService): McpServer {
     {
       title: "Forward a sandbox port to localhost",
       description:
-        "Make a TCP port inside the sandbox reachable from this machine as http://127.0.0.1:<local_port> (HTTP and WebSocket). Use it to open a dev server or web app running in the sandbox in the user's browser. The app must listen on 0.0.0.0 inside the sandbox. Returns the local URL to give the user.",
+        "Make a TCP port inside the sandbox reachable from this machine as http://127.0.0.1:<local_port> (HTTP and WebSocket, so dev servers with HMR work). Use it to open a dev server or web app running in the sandbox in the user's browser. The app must listen on 0.0.0.0 inside the sandbox, and requests arrive with the MicroVM endpoint as the Host header, so frameworks with host checks must allow it (Vite: server.allowedHosts=true or `vite --host 0.0.0.0` plus allowedHosts; webpack-dev-server: allowedHosts 'all'). Returns the local URL to give the user.",
       inputSchema: {
         sandbox_id: sandboxId,
         remote_port: z.number().int().min(1).max(65535).describe("Port the app listens on inside the sandbox, e.g. 3000."),

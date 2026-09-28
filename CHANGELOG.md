@@ -9,6 +9,15 @@
 - `setup --skip-image` refreshes the bucket and roles without rebuilding.
 - `sandbox_create` accepts `idle_s` to lengthen the auto-suspend window for
   apps a user keeps open in a browser.
+- Fix: the port forward sent the WebSocket handshake twice over TLS (`connect`
+  and `secureConnect`); the duplicate arrived at the app as a bogus frame with
+  RSV1 set and crashed ws-based servers such as Vite's HMR server. Verified with
+  a Vite dev server: HTTP, HMR handshake and live updates now work end to end.
+- The port forward retries idempotent requests that get 502 while a suspended
+  VM resumes, so a browser reload after idle just works. It also no longer
+  forwards `Sec-WebSocket-Extensions` (no compression across the Lambda proxy).
+- `sandbox_port_forward` explains the Host-check requirement (Vite
+  `server.allowedHosts`, webpack-dev-server `allowedHosts`).
 - Reproduction scripts `scripts/repro-idle-resume.ts` and
   `scripts/repro-excalidraw.ts` for the suspend/resume path (billable).
 - Fix: the build role could not write build logs (wrong log group path
