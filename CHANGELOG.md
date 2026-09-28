@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 (unreleased)
+## 0.2.1 (2026-09-28)
 
 - Optional CloudWatch runtime logs: `setup --execution-role` creates a role that
   can only write to CloudWatch Logs; start the server with

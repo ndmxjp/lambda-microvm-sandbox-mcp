@@ -1,6 +1,6 @@
 {
   "name": "@lambda-microvm-sandbox/agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "HTTP agent that runs inside a Lambda MicroVM and exposes exec/file APIs plus lifecycle hooks",
   "type": "module",
