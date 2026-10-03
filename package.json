@@ -21,8 +21,8 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
-    "@aws-sdk/client-sts": "^3.1141.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1144.0",
+    "@aws-sdk/client-sts": "^3.1144.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.2",
